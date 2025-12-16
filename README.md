@@ -2,7 +2,7 @@
 
 **virt-joiner** is a Kubernetes/OpenShift controller and Mutating Webhook designed to automatically enroll **KubeVirt VirtualMachines** into **FreeIPA** (or Red Hat IDM).
 
-It simplifies VM lifecycle management by handling identity registration at boot and cleanup at deletion, ensuring your IDM is always in sync with your cluster.
+It simplifies VM lifecycle management by handling identity registration at boot and cleanup at deletion.
 
 ## 🏗 Architecture
 
