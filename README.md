@@ -157,7 +157,7 @@ spec:
           volumeMounts:
             - name: certs
               # Must match the path in your Containerfile CMD
-              mountPath: /var/run/secrets/serving-cert 
+              mountPath: /var/run/secrets/serving-cert
               readOnly: true
       volumes:
         - name: certs
@@ -217,7 +217,7 @@ You can configure the application via **Environment Variables** or a `config.yam
 # Connectivity to FreeIPA / Red Hat IDM
 ipa_host: "ipa.example.com"
 ipa_user: "admin"
-# It is recommended to use an Environment Variable (IPA_PASS) for the password 
+# It is recommended to use an Environment Variable (IPA_PASS) for the password
 # instead of writing it here, but you can uncomment this for local testing.
 # ipa_pass: "SecretPassword123!"
 
@@ -237,7 +237,7 @@ finalizer_name: "ipa.enroll/cleanup"
 # This map determines which install command to inject into cloud-init based on
 # the VM's 'preference' or 'instancetype' name.
 #
-# Logic: If the VM preference contains the key (e.g. "ubuntu"), 
+# Logic: If the VM preference contains the key (e.g. "ubuntu"),
 # the corresponding command is used.
 # -----------------------------------------------------------------------------
 os_map:
@@ -260,10 +260,16 @@ os_map:
 2. Install dependencies:
 
     ```bash
-    # You may need libldap2-dev / openldap-devel installed on your OS
-    pip install -r requirements.txt
-    pip install -r requirements-test.txt
+      pip install -r requirements.txt
+      pip install -r requirements-test.txt
+      pip install -r requirements-dev.txt
     ```
+
+3. Install the git hooks
+
+  ```bash
+    pre-commit install --install-hooks
+  ```
 
 ### Running Locally
 
