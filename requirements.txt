@@ -1,0 +1,6 @@
+fastapi
+uvicorn
+python-freeipa
+jsonpatch
+kubernetes-asyncio
+PyYAML

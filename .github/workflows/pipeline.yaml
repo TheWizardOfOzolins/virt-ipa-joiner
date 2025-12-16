@@ -1,0 +1,176 @@
+name: CI/CD Pipeline (Podman/UBI)
+
+on:
+  push:
+    branches: [ "main" ]
+  pull_request:
+    branches: [ "main" ]
+
+env:
+  REGISTRY: ghcr.io
+  # github.repository is owner/repo-name
+  IMAGE_NAME: ${{ github.repository }}
+
+jobs:
+  # ------------------------------------------------------------------
+  # JOB 1: RUN UNIT TESTS (INSIDE UBI CONTAINER)
+  # ------------------------------------------------------------------
+  unit-tests:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Run Tests in UBI Container
+        # We use podman to spin up UBI locally, install deps, and run pytest.
+        # This guarantees the test environment matches the production image.
+        run: |
+          podman run --rm \
+            -u 0 \
+            -v ${{ github.workspace }}:/app:z \
+            -w /app \
+            registry.access.redhat.com/ubi9/python-312:latest \
+            /bin/bash -c "
+              # 1. Install RHEL System Dependencies
+              dnf install -y gcc openldap-devel cyrus-sasl-devel openssl-devel && \
+              
+              # 2. Install Python Dependencies
+              pip install --no-cache-dir -r requirements.txt && \
+              pip install --no-cache-dir -r requirements-test.txt && \
+              
+              # 3. Run Tests
+              # We add current dir to PYTHONPATH so 'app' imports work
+              PYTHONPATH=. pytest -v
+            "
+
+  # ------------------------------------------------------------------
+  # JOB 2: BUILD AND PUSH IMAGE (WITH PODMAN/BUILDAH)
+  # ------------------------------------------------------------------
+  build-and-push:
+    needs: unit-tests
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      # 1. Read Version from File
+      - name: Read App Version
+        id: get_version
+        run: |
+          if [ -f VERSION ]; then
+            echo "APP_VERSION=$(cat VERSION | tr -d '[:space:]')" >> $GITHUB_ENV
+          else
+            echo "APP_VERSION=0.0.0" >> $GITHUB_ENV
+          fi
+
+      # 2. Log in to Registry
+      - name: Podman Login
+        uses: redhat-actions/podman-login@v1
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      # 3. Generate Docker Metadata (Tags)
+      - name: Generate Tags
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
+          tags: |
+            # Tag 'latest' (Only on main)
+            type=raw,value=latest,enable=${{ github.ref == 'refs/heads/main' }}
+            # Tag from VERSION file (e.g. 0.1.0) (Only on main)
+            type=raw,value=${{ env.APP_VERSION }},enable=${{ github.ref == 'refs/heads/main' }}
+            # Tag for PRs (e.g. pr-12)
+            type=ref,event=pr
+            # Always tag SHA for traceability
+            type=sha,prefix=sha-
+
+      # 4. Build Image
+      - name: Build Image
+        id: build-image
+        uses: redhat-actions/buildah-build@v2
+        with:
+          image: ${{ env.IMAGE_NAME }}
+          tags: ${{ steps.meta.outputs.tags }}
+          containerfiles: |
+            ./Containerfile
+          build-args: |
+            APP_VERSION=${{ env.APP_VERSION }}
+
+      # 5. Push Image
+      - name: Push Image
+        uses: redhat-actions/push-to-registry@v2
+        with:
+          image: ${{ steps.build-image.outputs.image }}
+          tags: ${{ steps.build-image.outputs.tags }}
+          registry: ${{ env.REGISTRY }}
+
+  # ------------------------------------------------------------------
+  # JOB 3: SMOKE TEST (VERIFY IMAGE RUNS)
+  # ------------------------------------------------------------------
+  smoke-test:
+    needs: build-and-push
+    runs-on: ubuntu-latest
+    permissions:
+      packages: read
+    steps:
+      - name: Podman Login
+        uses: redhat-actions/podman-login@v1
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Generate Dummy Certificates
+        # Uvicorn will crash without certs; generate self-signed ones for the test
+        run: |
+          mkdir -p dummy-certs
+          openssl req -x509 -newkey rsa:4096 \
+            -keyout dummy-certs/tls.key \
+            -out dummy-certs/tls.crt \
+            -days 1 -nodes -subj "/CN=localhost"
+          # Ensure Podman (rootless) can read them
+          chmod 644 dummy-certs/tls.key dummy-certs/tls.crt
+
+      - name: Determine Tag to Test
+        id: get-tag
+        run: |
+          if [[ "${{ github.event_name }}" == "pull_request" ]]; then
+            echo "TAG=pr-${{ github.event.number }}" >> $GITHUB_ENV
+          else
+            echo "TAG=latest" >> $GITHUB_ENV
+          fi
+
+      - name: Start Container
+        run: |
+          image_url="${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ env.TAG }}"
+          echo "Testing Image: $image_url"
+          
+          # Run container detached
+          podman run --detach --name virt-joiner-test \
+            -v $(pwd)/dummy-certs:/var/run/secrets/serving-cert:Z \
+            -e LOG_LEVEL=DEBUG \
+            -p 8443:8443 \
+            $image_url
+
+      - name: Verify Startup
+        run: |
+          echo "Waiting 5 seconds for application startup..."
+          sleep 5
+          
+          # Check if process is still running
+          is_running=$(podman inspect -f '{{.State.Running}}' virt-joiner-test)
+          
+          if [ "$is_running" = "true" ]; then
+            echo "✅ Container started successfully."
+            podman logs virt-joiner-test
+          else
+            echo "❌ Container crashed on startup!"
+            podman logs virt-joiner-test
+            exit 1
+          fi

@@ -1,0 +1,32 @@
+# --- Virtual Environment ---
+venv/
+.venv/
+
+# --- Git Metadata ---
+.git/
+.gitignore
+
+# --- Python Cache & Bytecode ---
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+# --- Testing Artifacts ---
+app/tests/
+tests/
+requirements-test.txt
+.pytest_cache/
+
+# --- Local Configuration & Secrets ---
+# (Prevent local config/secrets from accidentally baking into the image)
+# You should mount these at runtime via ConfigMaps/Secrets
+config.yaml
+certs/
+kubeconfig
+
+# --- Deployment Manifests ---
+# (Not needed inside the container runtime)
+kubernetes/
+Containerfile
+README.md

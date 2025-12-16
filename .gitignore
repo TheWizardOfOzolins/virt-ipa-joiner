@@ -1,0 +1,6 @@
+venv
+__pycache__
+certs
+.vscode
+config.yaml
+.pytest_cache
