@@ -14,16 +14,18 @@ The application consists of two main components running in a single container:
 ## 🔄 Order of Events
 
 ### Phase 1: VM Creation & Enrollment
-1.  **Intercept:** A user applies a `VirtualMachine` manifest. The Kubernetes API pauses the request and sends it to `virt-joiner`.
-2.  **Registration:** `virt-joiner` connects to the FreeIPA server, creates a new host entry, and generates a One-Time Password (OTP).
-3.  **Injection:** The VM configuration is patched (mutated) to include a `cloud-init` script containing the OTP and the `ipa-client-install` command.
-4.  **Boot:** The VM is allowed to start. On first boot, `cloud-init` runs the install command, using the OTP to join the domain securely.
-5.  **Verification:** The background controller polls FreeIPA to check if the host has uploaded its Keytab (indicating success) and emits a `Normal` event to the Kubernetes object.
+
+1. **Intercept:** A user applies a `VirtualMachine` manifest. The Kubernetes API pauses the request and sends it to `virt-joiner`.
+2. **Registration:** `virt-joiner` connects to the FreeIPA server, creates a new host entry, and generates a One-Time Password (OTP).
+3. **Injection:** The VM configuration is patched (mutated) to include a `cloud-init` script containing the OTP and the `ipa-client-install` command.
+4. **Boot:** The VM is allowed to start. On first boot, `cloud-init` runs the install command, using the OTP to join the domain securely.
+5. **Verification:** The background controller polls FreeIPA to check if the host has uploaded its Keytab (indicating success) and emits a `Normal` event to the Kubernetes object.
 
 ### Phase 2: VM Deletion
-1.  **Watch:** When a user deletes the VM, the `virt-joiner` controller detects the deletion timestamp.
-2.  **Cleanup:** The controller connects to FreeIPA and deletes the host entry to ensure the directory remains clean.
-3.  **Finalize:** The Kubernetes Finalizer is removed, allowing the VM object to be fully deleted from the cluster.
+
+1.**Watch:** When a user deletes the VM, the `virt-joiner` controller detects the deletion timestamp.
+2. **Cleanup:** The controller connects to FreeIPA and deletes the host entry to ensure the directory remains clean.
+3. **Finalize:** The Kubernetes Finalizer is removed, allowing the VM object to be fully deleted from the cluster.
 
 ## ✨ Features
 
