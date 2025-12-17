@@ -58,7 +58,6 @@ async def mutate_vm(
             "response": {"uid": admission_uid, "allowed": True},
         }
 
-    # --- NEW: VALIDATION CHECK ---
     # Construct the target FQDN early to validate it
     fqdn = build_fqdn(vm_name, namespace)
 

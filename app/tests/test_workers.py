@@ -17,7 +17,6 @@ async def test_retry_logic_success(mocker, mock_k8s_client):
     mock_k8s_client.CustomObjectsApi.return_value = mock_cust_api
 
     # 3. Setup Side Effects (Fail twice, then succeed)
-    # Note: For AsyncMock side_effects with exceptions, we pass the exception instance directly
     mock_cust_api.get_namespaced_custom_object.side_effect = [
         client.ApiException(status=404),
         client.ApiException(status=404),

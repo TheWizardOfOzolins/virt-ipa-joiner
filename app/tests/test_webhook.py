@@ -188,12 +188,10 @@ def test_cloud_init_syntax_validity(mocker):
         (op for op in patch_obj if op["path"] == "/spec/template/spec/volumes/-"), None
     )
 
-    # FIX: Assert it is not None. This satisfies Pylance and fails the test cleanly if logic breaks.
     assert volume_patch is not None, "Cloud-init volume patch was not found in response"
 
     user_data_str = volume_patch["value"]["cloudInitNoCloud"]["userData"]
 
-    # ASSERTION: This should not raise a YAMLError
     parsed = yaml.safe_load(user_data_str)
 
     # Verify structure

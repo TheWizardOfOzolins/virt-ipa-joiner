@@ -22,7 +22,6 @@ def mock_ipa_actions(mocker):
 
 @pytest.fixture
 def mock_send_event(mocker):
-    # Fix: Patch the high-level 'delayed' sender so we don't need full K8s mocks
     return mocker.patch(
         "app.services.k8s.send_delayed_creation_event", new_callable=AsyncMock
     )
@@ -132,7 +131,6 @@ async def test_keytab_poll_success(mocker, mock_send_event):
     # 4. Verify
     assert mock_exec.call_count == 2
 
-    # Fix: We verify against the delayed sender signature
     mock_send_event.assert_called_with(
         "default",
         "vm-success",
