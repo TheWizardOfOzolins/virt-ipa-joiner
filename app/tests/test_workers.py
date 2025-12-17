@@ -1,6 +1,10 @@
 import pytest
 from unittest.mock import AsyncMock, MagicMock
-from app.services.k8s import send_delayed_creation_event, check_should_enroll, poll_ipa_keytab
+from app.services.k8s import (
+    send_delayed_creation_event,
+    check_should_enroll,
+    poll_ipa_keytab,
+)
 
 # Import the Fake exception class from where we injected it in conftest
 from kubernetes_asyncio import client
@@ -122,7 +126,7 @@ async def test_keytab_poll_reconnects_on_error(mocker):
     mock_exec = mocker.patch("app.services.k8s.execute_ipa_command")
     mock_exec.side_effect = [
         Exception("Connection Refused / Timeout"),
-        {"result": {"has_keytab": True}}
+        {"result": {"has_keytab": True}},
     ]
 
     # 5. Run Polling

@@ -5,6 +5,7 @@ import datetime
 import random
 import dns.resolver
 
+
 # --- Helper: DNS SRV Resolver ---
 def ipa_resolve_srv(service: str, protocol: str, domain: str) -> List[str]:
     """
@@ -24,7 +25,7 @@ def ipa_resolve_srv(service: str, protocol: str, domain: str) -> List[str]:
     results = []
 
     try:
-        answers = dns.resolver.resolve(query_name, 'SRV')
+        answers = dns.resolver.resolve(query_name, "SRV")
 
         if not answers:
             logger.info(f"No SRV records found for {query_name}")
@@ -38,7 +39,7 @@ def ipa_resolve_srv(service: str, protocol: str, domain: str) -> List[str]:
                 records_by_priority[prio] = []
 
             # Store target (stripped of dot)
-            target = rdata.target.to_text().rstrip('.')
+            target = rdata.target.to_text().rstrip(".")
             records_by_priority[prio].append(target)
 
         # Process priorities in order (lowest number = highest priority)
@@ -108,7 +109,7 @@ def get_ipa_client():
         except Exception as e:
             logger.warning(f"Failed to connect to {host}: {e}")
             errors.append(f"{host}: {str(e)}")
-            continue # Try the next server
+            continue  # Try the next server
 
     # If loop finishes without returning, we failed everywhere
     raise RuntimeError(f"All IPA connection attempts failed. Errors: {errors}")

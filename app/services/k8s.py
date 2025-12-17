@@ -206,7 +206,9 @@ async def poll_ipa_keytab(namespace, name, fqdn, timeout_minutes=15):
                 logger.info("Attempting to switch/reconnect IPA client...")
                 c = get_ipa_client()
             except Exception as re_connect_error:
-                logger.warning(f"Failed to reconnect during polling: {re_connect_error}")
+                logger.warning(
+                    f"Failed to reconnect during polling: {re_connect_error}"
+                )
 
         await asyncio.sleep(30)
 

@@ -72,7 +72,7 @@ async def test_mutate_vm_success(mocker):
     # 1. Mock the dependencies
     mocker.patch(
         "app.routers.webhook.ipa_host_add",
-        return_value=("secret-otp-123", "ipa-server-1.example.com")
+        return_value=("secret-otp-123", "ipa-server-1.example.com"),
     )
 
     # Mock K8s checks (Always say yes to enrollment)
@@ -120,7 +120,7 @@ async def test_mutate_vm_os_detection(mocker):
     # 1. Mock dependencies
     mocker.patch(
         "app.routers.webhook.ipa_host_add",
-        return_value=("otp-ubuntu", "ipa-server-1.example.com")
+        return_value=("otp-ubuntu", "ipa-server-1.example.com"),
     )
     mocker.patch("app.routers.webhook.check_should_enroll", return_value=True)
     mocker.patch("fastapi.BackgroundTasks.add_task")
@@ -181,7 +181,7 @@ def test_cloud_init_syntax_validity(mocker):
     """
     mocker.patch(
         "app.routers.webhook.ipa_host_add",
-        return_value=("otp", "ipa-server-1.example.com")
+        return_value=("otp", "ipa-server-1.example.com"),
     )
     mocker.patch("app.routers.webhook.check_should_enroll", return_value=True)
     mocker.patch("fastapi.BackgroundTasks.add_task")
