@@ -1,5 +1,6 @@
 import pytest
 import asyncio
+import datetime
 from unittest.mock import MagicMock, AsyncMock
 from app.services.k8s import run_controller, poll_ipa_keytab
 
@@ -130,10 +131,26 @@ async def test_keytab_poll_timeout(mocker, mock_send_event):
     mocker.patch("app.services.k8s.execute_ipa_command", return_value={"result": {"has_keytab": False}})
     mocker.patch("asyncio.sleep", new_callable=AsyncMock)
 
-    # Patch datetime
+    # Patch datetime with REAL datetime objects
     mock_dt = mocker.patch("app.services.k8s.datetime")
-    mock_dt.datetime.now.side_effect = [100, 101, 200]
-    mock_dt.timedelta.return_value = 50
+
+    # Define a base time
+    start_time = datetime.datetime(2024, 1, 1, 12, 0, 0)
+
+    # Side Effect:
+    # 1. First call is for 'end_time' calculation (start + timeout)
+    # 2. Second call is for the while loop check (start < end) -> True, enter loop
+    # 3. Third call is for the next loop check (later > end) -> False, exit loop
+    mock_dt.datetime.now.side_effect = [
+        start_time,                                      # For calculating end_time
+        start_time,                                      # Loop 1 check
+        start_time + datetime.timedelta(minutes=100)     # Loop 2 check (timeout exceeded)
+    ]
+
+    # We must allow timedelta to work normally or mock it to match our logic
+    # Since we are passing real datetime objects above, we can just let timedelta be the real one
+    # But since we mocked 'app.services.k8s.datetime', we need to restore timedelta
+    mock_dt.timedelta = datetime.timedelta
 
     await poll_ipa_keytab("default", "vm-fail", "vm.fail.com", timeout_minutes=1)
 

@@ -3,6 +3,7 @@ from fastapi.testclient import TestClient
 from app.main import app
 import base64
 import json
+import yaml
 
 client = TestClient(app)
 
@@ -165,3 +166,33 @@ async def test_mutate_vm_os_detection(mocker):
 
     # Should still see the enroll command
     assert "ipa-client-install" in user_data
+
+def test_cloud_init_syntax_validity(mocker):
+    """
+    Ensures the generated user-data string is actually valid YAML.
+    """
+    mocker.patch("app.routers.webhook.ipa_host_add", return_value="otp")
+    mocker.patch("app.routers.webhook.check_should_enroll", return_value=True)
+    mocker.patch("fastapi.BackgroundTasks.add_task")
+
+    response = client.post("/mutate", json=SAMPLE_REVIEW)
+    data = response.json()
+
+    # Decode the patch
+    patch_decoded = base64.b64decode(data["response"]["patch"]).decode()
+    patch_obj = json.loads(patch_decoded)
+
+    # Extract the user-data string
+    volume_patch = next((op for op in patch_obj if op["path"] == "/spec/template/spec/volumes/-"), None)
+
+    # FIX: Assert it is not None. This satisfies Pylance and fails the test cleanly if logic breaks.
+    assert volume_patch is not None, "Cloud-init volume patch was not found in response"
+
+    user_data_str = volume_patch["value"]["cloudInitNoCloud"]["userData"]
+
+    # ASSERTION: This should not raise a YAMLError
+    parsed = yaml.safe_load(user_data_str)
+
+    # Verify structure
+    assert "runcmd" in parsed
+    assert isinstance(parsed["runcmd"], list)
