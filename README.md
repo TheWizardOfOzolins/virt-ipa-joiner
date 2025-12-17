@@ -319,10 +319,20 @@ podman build -t virt-joiner:latest -f Containerfile .
 
 ## 🤝 Contributing
 
-1. Bump the version in the `VERSION` file.
-2. Submit a Pull Request.
-3. CI will run tests automatically.
-4. On merge to `main`, a new container image will be pushed to GHCR with the version tag.
+We welcome contributions! Follow these steps to submit bug fixes or new features:
+
+1. **Make your changes:** Create an Issue with your proposed changes. Than create a new branch for your feature or fix.
+2. **Submit a Pull Request:** Push your branch and open a PR against `main`.
+3. **CI Verification:** The CI pipeline will automatically run the test suite against your code.
+4. **Merge:** Once approved, your code will be merged into `main` (this does **not** trigger a new release image).
+
+## 🚀 Releasing
+
+To publish a new version of the application to GHCR:
+
+1. **Bump the Version:** Update the semantic version number in the `VERSION` file.
+2. **Submit a Release PR:** Open a Pull Request with the version change.
+3. **Deploy:** Upon merging the version bump to `main`, the deployment pipeline will trigger automatically and push the new container image to GHCR with the corresponding version tag.
 
 ## Licence
 
