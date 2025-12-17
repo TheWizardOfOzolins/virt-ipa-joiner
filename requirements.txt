@@ -3,4 +3,4 @@ uvicorn==0.38.0
 python-freeipa==1.0.10
 jsonpatch==1.33
 kubernetes_asyncio==33.3.0
-PyYAML=6.0.3
+PyYAML==6.0.3
