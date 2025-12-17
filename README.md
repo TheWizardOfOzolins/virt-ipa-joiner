@@ -334,6 +334,6 @@ To publish a new version of the application to GHCR:
 2. **Submit a Release PR:** Open a Pull Request with the version change.
 3. **Deploy:** Upon merging the version bump to `main`, the deployment pipeline will trigger automatically and push the new container image to GHCR with the corresponding version tag.
 
-## Licence
+## 📜 License
 
 Apache License 2.0
