@@ -39,6 +39,7 @@ jobs:
   # JOB 1: RUN UNIT TESTS (INSIDE UBI CONTAINER)
   # ------------------------------------------------------------------
   unit-tests:
+    needs: lint
     runs-on: ubuntu-latest
     steps:
       - name: Checkout Code
