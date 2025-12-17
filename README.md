@@ -42,8 +42,6 @@ The application consists of two main components running in a single container:
 * FreeIPA / Red Hat IDM server reachable from the cluster.
 * A Service Account in IPA with permissions to add/delete hosts.
 
-
-
 ### 1. Create Secret
 
 Create a secret containing your IPA credentials.
@@ -145,6 +143,8 @@ spec:
           env:
             - name: IPA_HOST
               value: "ipa.example.com"
+            - name: IPA_VERIFY_SSL
+              value: "True"
             - name: IPA_USER
               value: "admin"
             - name: IPA_PASS
@@ -206,6 +206,7 @@ You can configure the application via **Environment Variables** or a `config.yam
 | `IPA_HOST` | Hostname of FreeIPA server | `ipa.example.com` |
 | `IPA_USER` | User with add/del permissions | `admin` |
 | `IPA_PASS` | Password for the user | *Required* |
+| `IPA_VERIFY_SSL`| Verifys IPA tls certs | `false` |
 | `DOMAIN` | Domain name for the host (FQDN) | `example.com` |
 | `LOG_LEVEL` | Logging verbosity | `INFO` |
 | `FINALIZER_NAME` | K8s Finalizer string | `ipa.enroll/cleanup` |
@@ -220,6 +221,9 @@ ipa_user: "admin"
 # It is recommended to use an Environment Variable (IPA_PASS) for the password
 # instead of writing it here, but you can uncomment this for local testing.
 # ipa_pass: "SecretPassword123!"
+
+# Set to false by default but in a production environment its probably worth setting this to true.
+ipa_verify_ssl: false
 
 # The DNS domain your VMs will join
 domain: "example.com"
@@ -281,6 +285,7 @@ To test the controller logic locally against a real K8s cluster and IPA server:
     export IPA_HOST="ipa.example.com"
     export IPA_USER="admin"
     export IPA_PASS="Secret123!"
+    export IPA_VERIFY_SSL='False'
     export DOMAIN="example.com"
     export KUBECONFIG=~/.kube/config
     ```
