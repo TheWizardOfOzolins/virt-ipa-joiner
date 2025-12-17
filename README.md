@@ -111,7 +111,6 @@ metadata:
   name: virt-joiner
   namespace: virtualisation
   annotations:
-    # OpenShift magic: automatically generates the TLS secret
     service.beta.openshift.io/serving-cert-secret-name: virt-joiner-certs
 spec:
   ports:
@@ -158,7 +157,7 @@ spec:
               value: "example.com"
           volumeMounts:
             - name: certs
-              # Must match the path in your Containerfile CMD
+              # Must match the path in the Containerfile CMD
               mountPath: /var/run/secrets/serving-cert
               readOnly: true
       volumes:
@@ -196,7 +195,7 @@ webhooks:
     admissionReviewVersions: ["v1"]
     sideEffects: None
     timeoutSeconds: 10
-    failurePolicy: Fail # Start with 'Fail' to ensure policies are enforced
+    failurePolicy: Fail
 ```
 
 ## ⚙️ Configuration

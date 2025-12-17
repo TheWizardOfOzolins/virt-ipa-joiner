@@ -1,4 +1,3 @@
-# Use Red Hat Universal Base Image (UBI) 9 with Python 3.12
 FROM registry.access.redhat.com/ubi9/python-312:latest
 
 # Switch to root to install system dependencies
@@ -8,10 +7,6 @@ ARG APP_VERSION=0.0.0
 ENV APP_VERSION=$APP_VERSION
 
 # Install system dependencies required for python-freeipa (LDAP/SASL)
-# RHEL/UBI uses 'dnf' instead of 'apt-get'
-# openldap-devel corresponds to libldap2-dev
-# cyrus-sasl-devel corresponds to libsasl2-dev
-# openssl-devel corresponds to libssl-dev
 RUN dnf install -y \
     gcc \
     openldap-devel \
@@ -39,8 +34,6 @@ RUN pip install --no-cache-dir -r requirements.txt && \
 
 # Copy the application code
 COPY app ./app
-
-# ... (Previous install steps) ...
 
 # Expose 8443 (Standard for secured webhooks)
 EXPOSE 8443
