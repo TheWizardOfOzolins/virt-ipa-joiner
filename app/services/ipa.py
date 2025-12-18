@@ -1,6 +1,6 @@
 from python_freeipa import Client
 from app.config import CONFIG, logger
-from typing import List, Tuple
+from typing import List, Tuple, Any
 import datetime
 import random
 import dns.resolver
@@ -63,10 +63,13 @@ def ipa_resolve_srv(service: str, protocol: str, domain: str) -> List[str]:
 
 
 # --- Helper: Get Authenticated Client (Retry Logic) ---
-def get_ipa_client():
+def get_ipa_client() -> Tuple[Any, str]:
     """
     Creates an authenticated Client by trying DNS candidates first,
     then falling back to the static IPA_HOST config.
+
+    Returns:
+        Tuple[Any, str]: (Authenticated Client Object, Connected Hostname)
     """
     candidate_hosts = []
 
@@ -104,7 +107,9 @@ def get_ipa_client():
             c.login(CONFIG["IPA_USER"], CONFIG["IPA_PASS"])
 
             logger.info(f"Successfully authenticated to {host}")
-            return c
+
+            # Return BOTH the client and the hostname string we connected to
+            return c, host
 
         except Exception as e:
             logger.warning(f"Failed to connect to {host}: {e}")
@@ -127,12 +132,14 @@ def execute_ipa_command(client, command, *args, **kwargs):
 
 # --- Action: Add Host to IPA ---
 def ipa_host_add(vm_name: str, namespace: str, vm_uuid: str) -> Tuple[str, str]:
-    client_ipa = get_ipa_client()
+    # Unpack the tuple here to get the explicit hostname
+    client_ipa, connected_host = get_ipa_client()
+
     fqdn = build_fqdn(vm_name, namespace)
     timestamp = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     desc_text = f"Created by virt-joiner at {timestamp} | K8s UID: {vm_uuid}"
 
-    logger.info(f"Registering host: {fqdn} on server {client_ipa.host}")
+    logger.info(f"Registering host: {fqdn} on server {connected_host}")
     try:
         execute_ipa_command(
             client_ipa, "host_add", fqdn, force=True, description=desc_text
@@ -141,7 +148,7 @@ def ipa_host_add(vm_name: str, namespace: str, vm_uuid: str) -> Tuple[str, str]:
         execute_ipa_command(client_ipa, "host_mod", fqdn, userpassword=otp)
 
         # Return the OTP *AND* the server we actually talked to
-        return otp, client_ipa.host
+        return otp, connected_host
 
     except Exception as e:
         logger.error(f"IPA Add Error for {fqdn}: {e}")
@@ -150,7 +157,8 @@ def ipa_host_add(vm_name: str, namespace: str, vm_uuid: str) -> Tuple[str, str]:
 
 # --- Action: Delete Host from IPA ---
 def ipa_host_del(vm_name: str, namespace: str):
-    client_ipa = get_ipa_client()
+    client_ipa, _ = get_ipa_client()
+
     fqdn = build_fqdn(vm_name, namespace)
     logger.info(f"Deleting host: {fqdn}")
     try:
