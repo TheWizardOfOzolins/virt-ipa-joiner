@@ -90,6 +90,7 @@ def test_get_ipa_client_retry_flow(mocker):
 
     # Verify we tried initializing with both hosts in order
     from unittest.mock import call
+
     expected_calls = [
         call(host="dns-host-1", verify_ssl=False),
         call().login("admin", "pass"),
