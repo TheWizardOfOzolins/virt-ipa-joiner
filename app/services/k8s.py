@@ -170,7 +170,8 @@ async def poll_ipa_keytab(namespace, name, fqdn, timeout_minutes=15):
     end_time = datetime.datetime.now() + datetime.timedelta(minutes=timeout_minutes)
 
     try:
-        c = get_ipa_client()
+        # UPDATED: Unpack the tuple (client, hostname)
+        c, _ = get_ipa_client()
     except Exception as e:
         logger.error(f"Failed to create IPA client for polling: {e}")
         return
@@ -200,14 +201,17 @@ async def poll_ipa_keytab(namespace, name, fqdn, timeout_minutes=15):
                     return
 
         except Exception as e:
-            if "session" in str(e).lower() or "login" in str(e).lower():
-                try:
-                    c = get_ipa_client()
-                except Exception:
-                    pass
-            logger.debug(f"Polling {fqdn} failed (retrying in 30s): {e}")
+            # UPDATED: Log as warning so we see the root cause (e.g. "auth failed")
+            logger.warning(f"Polling check failed for {fqdn}: {e}")
+            try:
+                logger.info("Attempting to switch/reconnect IPA client...")
+                c, _ = get_ipa_client()
+            except Exception as re_connect_error:
+                logger.warning(
+                    f"Failed to reconnect during polling: {re_connect_error}"
+                )
 
-        await asyncio.sleep(30)
+        await asyncio.sleep(10)
 
     logger.warning(f"Keytab watcher timed out for {fqdn}")
     await send_delayed_creation_event(

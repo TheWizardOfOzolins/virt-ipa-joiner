@@ -87,12 +87,14 @@ async def mutate_vm(
 
     patch = []
     otp = None
+    pinned_server = None
     enrollment_success = False
     status_msg = ""
 
     # 1. Attempt IPA Enrollment
     try:
-        otp = ipa_host_add(vm_name, namespace, admission_uid)
+        otp, pinned_server = ipa_host_add(vm_name, namespace, admission_uid)
+
         enrollment_success = True
         fqdn = build_fqdn(vm_name, namespace)
         status_msg = f"Enrolled as {fqdn}"
@@ -147,7 +149,7 @@ async def mutate_vm(
 
         ipa_cmd_parts = [
             "ipa-client-install",
-            f"--server={CONFIG['IPA_HOST']}",
+            f"--server={pinned_server}",
             f"--hostname={fqdn}",
             f"--domain={CONFIG['DOMAIN']}",
             f"--realm={CONFIG['DOMAIN'].upper()}",

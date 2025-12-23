@@ -31,6 +31,7 @@ The application consists of two main components running in a single container:
 
 * **Automatic Enrollment:** Injects `ipa-client-install` commands via Cloud-Init.
 * **Automatic Cleanup:** Removes hosts from IPA when the KubeVirt VM is deleted.
+* **DNS Auto-Discovery:** Automatically locates FreeIPA servers using _kerberos._tcp SRV records, ensuring high availability and load balancing without manual configuration.
 * **Dynamic OS Support:** Automatically detects OS (RHEL/CentOS/Fedora vs Ubuntu/Debian) based on `instancetype` or `preference` and adjusts install commands (`dnf` vs `apt-get`).
 * **InstanceType Inheritance:** Supports inheriting enrollment labels from `VirtualMachineClusterInstanceType`.
 * **Security:** Runs as a non-root user (UID 1001) on Red Hat UBI 9.
@@ -198,13 +199,20 @@ webhooks:
     failurePolicy: Fail
 ```
 
+#### Service Discovery
+
+`virt-joiner` attempts to locate FreeIPA servers in the following order:
+
+1. **DNS SRV Records:** It queries `_kerberos._tcp.<DOMAIN>` to find all available servers. If multiple records are found, it respects priority and randomizes weight for load balancing.
+2. **Static Configuration:** If no SRV records are found, it falls back to the `IPA_HOST` variable. This can be a single host or a comma-separated list (e.g., `ipa1.lab.com,ipa2.lab.com`).
+
 ## ⚙️ Configuration
 
 You can configure the application via **Environment Variables** or a `config.yaml` file mounted at the application root.
 
 | Variable | Description | Default |
 | :--- | :--- | :--- |
-| `IPA_HOST` | Hostname of FreeIPA server | `ipa.example.com` |
+| `IPA_HOST` | Fallback hostname(s) if DNS discovery fails (comma-separated for multiple) | `ipa.example.com` |
 | `IPA_USER` | User with add/del permissions | `admin` |
 | `IPA_PASS` | Password for the user | *Required* |
 | `IPA_VERIFY_SSL`| Verifys IPA tls certs | `false` |
@@ -217,6 +225,8 @@ You can configure the application via **Environment Variables** or a `config.yam
 
 ```yaml
 # Connectivity to FreeIPA / Red Hat IDM
+# Used only if DNS SRV lookup (_kerberos._tcp.example.com) fails.
+# You can specify a single host or a list: "ipa1.example.com,ipa2.example.com"
 ipa_host: "ipa.example.com"
 ipa_user: "admin"
 # It is recommended to use an Environment Variable (IPA_PASS) for the password

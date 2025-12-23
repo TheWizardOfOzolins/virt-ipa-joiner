@@ -70,8 +70,10 @@ async def test_mutate_vm_fqdn_too_long(mocker):
 @pytest.mark.asyncio
 async def test_mutate_vm_success(mocker):
     # 1. Mock the dependencies
-    # Mock IPA success returning a fake OTP
-    mocker.patch("app.routers.webhook.ipa_host_add", return_value="secret-otp-123")
+    mocker.patch(
+        "app.routers.webhook.ipa_host_add",
+        return_value=("secret-otp-123", "ipa-server-1.example.com"),
+    )
 
     # Mock K8s checks (Always say yes to enrollment)
     mocker.patch("app.routers.webhook.check_should_enroll", return_value=True)
@@ -106,6 +108,8 @@ async def test_mutate_vm_success(mocker):
     assert "secret-otp-123" in user_data  # Ensure OTP was passed
     assert "dnf install" in user_data  # Default RHEL command
 
+    assert "--server=ipa-server-1.example.com" in user_data
+
 
 @pytest.mark.asyncio
 async def test_mutate_vm_os_detection(mocker):
@@ -114,7 +118,10 @@ async def test_mutate_vm_os_detection(mocker):
     correct install command from the OS_MAP.
     """
     # 1. Mock dependencies
-    mocker.patch("app.routers.webhook.ipa_host_add", return_value="otp-ubuntu")
+    mocker.patch(
+        "app.routers.webhook.ipa_host_add",
+        return_value=("otp-ubuntu", "ipa-server-1.example.com"),
+    )
     mocker.patch("app.routers.webhook.check_should_enroll", return_value=True)
     mocker.patch("fastapi.BackgroundTasks.add_task")
 
@@ -172,7 +179,10 @@ def test_cloud_init_syntax_validity(mocker):
     """
     Ensures the generated user-data string is actually valid YAML.
     """
-    mocker.patch("app.routers.webhook.ipa_host_add", return_value="otp")
+    mocker.patch(
+        "app.routers.webhook.ipa_host_add",
+        return_value=("otp", "ipa-server-1.example.com"),
+    )
     mocker.patch("app.routers.webhook.check_should_enroll", return_value=True)
     mocker.patch("fastapi.BackgroundTasks.add_task")
 
