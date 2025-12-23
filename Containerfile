@@ -1,5 +1,5 @@
 # Stage 1: Builder stage (includes build dependencies like gcc)
-FROM registry.access.redhat.com/ubi9/python-312:latest AS builder
+FROM registry.access.redhat.com/ubi10/python-312-minimal:10.1 AS builder
 
 # Switch to root for installing system packages
 USER 0
@@ -8,12 +8,12 @@ ARG APP_VERSION=0.0.0
 ENV APP_VERSION=$APP_VERSION
 
 # Install system dependencies needed for compiling certain Python packages (e.g., python-freeipa)
-RUN dnf install -y \
+RUN microdnf install -y \
     gcc \
     openldap-devel \
     cyrus-sasl-devel \
     openssl-devel && \
-    dnf clean all && \
+    microdnf clean all && \
     rm -rf /var/cache/dnf
 
 # Set environment variables
@@ -32,7 +32,7 @@ RUN pip install --no-cache-dir -r requirements.txt && \
 # Switch back to non-root user for safety
 USER 1001
 
-FROM registry.access.redhat.com/ubi9/python-312:latest
+FROM registry.access.redhat.com/ubi10/python-312-minimal:10.1
 
 # Copy the installed Python site-packages from the builder
 COPY --from=builder /opt/app-root /opt/app-root
