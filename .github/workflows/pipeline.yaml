@@ -70,6 +70,8 @@ jobs:
     steps:
       - name: Checkout Code
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0 # Required to check for existing tags
 
       - name: Read App Version
         id: get_version
@@ -81,23 +83,34 @@ jobs:
           fi
 
       # ---------------------------------------------------------
+      # LOGIC: CHECK IF VERSION IS NEW
+      # ---------------------------------------------------------
+      - name: Check Release Status
+        id: check_release
+        run: |
+          # Fetch tags to see if this version was already released
+          git fetch --tags
+          
+          if git rev-parse "v${{ env.APP_VERSION }}" >/dev/null 2>&1; then
+            echo "::notice title=Release Status::Version v${{ env.APP_VERSION }} already exists. Skipping 'latest' and version tags."
+            echo "IS_NEW_RELEASE=false" >> $GITHUB_ENV
+          else
+            echo "::notice title=Release Status::New version v${{ env.APP_VERSION }} detected. Will push 'latest' and version tags."
+            echo "IS_NEW_RELEASE=true" >> $GITHUB_ENV
+          fi
+
+      # ---------------------------------------------------------
       # LOGIC: DETECT FORK VS. OWNER
       # ---------------------------------------------------------
       - name: Determine Registry & Context
         id: registry-context
         run: |
-          # Check if the PR comes from the same repo (internal) or a fork
           if [[ "${{ github.event.pull_request.head.repo.full_name }}" == "${{ github.repository }}" || "${{ github.event_name }}" == "push" ]]; then
             echo "IS_FORK=false" >> $GITHUB_ENV
             echo "Using Official Registry: ghcr.io"
           else
             echo "IS_FORK=true" >> $GITHUB_ENV
-
-            # Use ttl.sh for forks (Ephemeral, No Auth required)
             echo "REGISTRY=ttl.sh" >> $GITHUB_ENV
-
-            # Rename image to avoid deep namespace issues on ttl.sh
-            # Format: ttl.sh/virt-joiner-pr-123
             echo "IMAGE_NAME=virt-joiner-pr-${{ github.event.number }}" >> $GITHUB_ENV
             echo "Using Ephemeral Registry: ttl.sh"
           fi
@@ -122,12 +135,13 @@ jobs:
         with:
           images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
           tags: |
-            # 1. Official Tags (Only on Main Branch)
-            type=raw,value=latest,enable=${{ github.ref == 'refs/heads/main' }}
-            type=raw,value=${{ env.APP_VERSION }},enable=${{ github.ref == 'refs/heads/main' }}
+            # 1. Official Tags (Only on Main Branch AND New Release)
+            # We ONLY update 'latest' and '1.0.0' if the tag doesn't exist yet
+            type=raw,value=latest,enable=${{ github.ref == 'refs/heads/main' && env.IS_NEW_RELEASE == 'true' }}
+            type=raw,value=${{ env.APP_VERSION }},enable=${{ github.ref == 'refs/heads/main' && env.IS_NEW_RELEASE == 'true' }}
 
             # 2. Commit SHA (Always)
-            # - If Fork: Add '1d' suffix for ttl.sh expiration (e.g., sha-abc-1d)
+            # - If Fork: Add '1d' suffix for ttl.sh expiration
             # - If Owner: Just sha-abc
             type=sha,prefix=sha-,suffix=${{ env.IS_FORK == 'true' && '-1d' || '' }}
 
@@ -146,7 +160,7 @@ jobs:
             APP_VERSION=${{ env.APP_VERSION }}
 
       # ---------------------------------------------------------
-      # SMOKE TEST (Runs locally on Runner)
+      # SMOKE TEST
       # ---------------------------------------------------------
       - name: Generate Dummy Certificates
         run: |
@@ -156,7 +170,6 @@ jobs:
 
       - name: Start Container (Smoke Test)
         run: |
-          # Get the first tag generated (locally available)
           IMAGE_REF=$(echo "${{ steps.meta.outputs.tags }}" | head -n 1)
           echo "Testing Image: $IMAGE_REF"
 
@@ -183,7 +196,7 @@ jobs:
           fi
 
       # ---------------------------------------------------------
-      # PUSH (To GHCR or TTL.SH)
+      # PUSH
       # ---------------------------------------------------------
       - name: Push Image
         uses: redhat-actions/push-to-registry@v2
@@ -193,14 +206,12 @@ jobs:
           registry: ${{ env.REGISTRY }}
 
       # ---------------------------------------------------------
-      # NOTIFY FORKS (Log to Console/Summary)
+      # NOTIFY FORKS
       # ---------------------------------------------------------
       - name: Log Public Image URL
         if: env.IS_FORK == 'true'
         run: |
-          # Grab the first tag (the ttl.sh one)
           IMAGE_REF=$(echo "${{ steps.meta.outputs.tags }}" | head -n 1)
-
           echo "======================================================="
           echo "🚀 EXTERNAL BUILD AVAILABLE (Valid for 24h)"
           echo "To test this image, run:"
@@ -208,8 +219,6 @@ jobs:
           echo "podman pull $IMAGE_REF"
           echo ""
           echo "======================================================="
-
-          # Create a GitHub Notice (Shows up on the main Run Summary page)
           echo "::notice title=Test Image Available::External build pushed! Run: podman pull $IMAGE_REF"
 
   # ------------------------------------------------------------------
@@ -224,6 +233,8 @@ jobs:
     steps:
       - name: Checkout Code
         uses: actions/checkout@v4
+        with:
+            fetch-depth: 0
 
       - name: Read App Version
         id: get_version
