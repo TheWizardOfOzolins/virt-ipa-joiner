@@ -25,7 +25,9 @@ async def lifespan(app: FastAPI):
     except asyncio.CancelledError:
         pass
 
+
 app = FastAPI(lifespan=lifespan)
+
 
 @app.get("/healthz")
 async def healthz():
@@ -33,6 +35,7 @@ async def healthz():
     Simple health check for Kubernetes Liveness/Readiness probes.
     """
     return {"status": "ok"}
+
 
 # Register the router
 app.include_router(webhook.router)
