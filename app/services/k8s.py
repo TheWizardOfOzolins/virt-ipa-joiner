@@ -251,7 +251,7 @@ async def check_should_enroll(vm_object, namespace):
             api = client.CustomObjectsApi(api_client)
 
             raw_obj = None
-            if it_kind == "VirtualMachineClusterInstanceType":
+            if "cluster" in it_kind.lower():
                 raw_obj = await api.get_cluster_custom_object(
                     group="instancetype.kubevirt.io",
                     version="v1beta1",
