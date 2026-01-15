@@ -5,7 +5,7 @@ metadata:
   annotations:
     service.beta.openshift.io/inject-cabundle: "true"
 webhooks:
-  - name: virt-ipa-joiner.virtualisation.svc
+  - name: virt-ipa-joiner.openshift-cnv.svc
     clientConfig:
       service:
         name: virt-ipa-joiner
