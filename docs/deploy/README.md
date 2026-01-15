@@ -23,7 +23,8 @@ stringData:
   IPA_HOST: "ipa.example.com"
   IPA_USER: "admin"
   IPA_PASS: "Secret123!"
-  DOMAIN: "example.com"
+  DOMAIN: "abc.example.com"
+  REALM: "example.com"
 ```
 
 ## Apply the Kustomization
@@ -56,7 +57,8 @@ You can configure the application via **Environment Variables** or a `config.yam
 | `IPA_USER` | User with add/del permissions | `admin` |
 | `IPA_PASS` | Password for the user | *Required* |
 | `IPA_VERIFY_SSL`| Verifys IPA tls certs | `false` |
-| `DOMAIN` | Domain name for the host (FQDN) | `example.com` |
+| `DOMAIN` | Domain name for the host (FQDN) | `abc.example.com` |
+| `REALM` | IPA REALM that the host is joining to | `EXAMPLE.COM`
 | `LOG_LEVEL` | Logging verbosity | `INFO` |
 | `FINALIZER_NAME` | K8s Finalizer string | `ipa.enroll/cleanup` |
 | `CONFIG_PATH` | Path to config.yaml | `config.yaml` (in app root dir)
@@ -77,7 +79,10 @@ ipa_user: "admin"
 ipa_verify_ssl: false
 
 # The DNS domain your VMs will join
-domain: "example.com"
+domain: "abc.example.com"
+
+#  IPA REALM that the host is joining to
+realm: "EXAMPLE.COM"
 
 # Logging verbosity: DEBUG, INFO, WARNING, ERROR
 log_level: "INFO"
