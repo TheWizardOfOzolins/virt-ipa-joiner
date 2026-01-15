@@ -14,6 +14,7 @@ def load_config(config_path=None):
         "IPA_USER": "admin",
         "IPA_PASS": "password",
         "DOMAIN": "example.com",
+        "REALM": None,
         "IPA_VERIFY_SSL": False,
         "FINALIZER_NAME": "ipa.enroll/cleanup",
         "LOG_LEVEL": "INFO",
@@ -33,6 +34,7 @@ def load_config(config_path=None):
                     "ipa_user",
                     "ipa_pass",
                     "domain",
+                    "realm",
                     "ipa_verify_ssl",
                     "finalizer_name",
                     "log_level",
@@ -53,6 +55,7 @@ def load_config(config_path=None):
     conf["IPA_USER"] = os.getenv("IPA_USER", conf["IPA_USER"])
     conf["IPA_PASS"] = os.getenv("IPA_PASS", conf["IPA_PASS"])
     conf["DOMAIN"] = os.getenv("DOMAIN", conf["DOMAIN"])
+    conf["REALM"] = os.getenv("REALM", conf["REALM"])
     conf["FINALIZER_NAME"] = os.getenv("FINALIZER_NAME", conf["FINALIZER_NAME"])
     conf["LOG_LEVEL"] = os.getenv("LOG_LEVEL", conf["LOG_LEVEL"]).upper()
 

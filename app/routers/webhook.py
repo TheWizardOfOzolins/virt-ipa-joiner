@@ -74,7 +74,6 @@ async def mutate_vm(
                 "status": {"message": error_msg, "code": 400},
             },
         }
-    # -----------------------------
 
     should_enroll = await check_should_enroll(vm_object, namespace)
 
@@ -147,12 +146,14 @@ async def mutate_vm(
                 install_cmd_str = os_cmd
                 break
 
+        realm_arg = CONFIG.get("REALM", CONFIG["DOMAIN"].upper())
+
         ipa_cmd_parts = [
             "ipa-client-install",
             f"--server={pinned_server}",
             f"--hostname={fqdn}",
             f"--domain={CONFIG['DOMAIN']}",
-            f"--realm={CONFIG['DOMAIN'].upper()}",
+            f"--realm={realm_arg}",
             f"--password='{otp}'",
             "--mkhomedir",
             "--unattended",
