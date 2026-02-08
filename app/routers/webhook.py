@@ -158,6 +158,7 @@ async def mutate_vm(
             "--mkhomedir",
             "--unattended",
             "--no-ntp",
+            "--no-nisdomain",
         ]
         enroll_cmd_str = " ".join(ipa_cmd_parts)
 
