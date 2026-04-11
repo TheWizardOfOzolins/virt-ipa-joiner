@@ -144,15 +144,18 @@ def ipa_host_add(vm_name: str, namespace: str, vm_uuid: str) -> Tuple[str, str]:
         execute_ipa_command(
             client_ipa, "host_add", fqdn, force=True, description=desc_text
         )
-        otp = vm_uuid
-        execute_ipa_command(client_ipa, "host_mod", fqdn, userpassword=otp)
-
-        # Return the OTP *AND* the server we actually talked to
-        return otp, connected_host
-
     except Exception as e:
-        logger.error(f"IPA Add Error for {fqdn}: {e}")
-        raise e
+        if "already exists" in str(e).lower() or "duplicate" in str(e).lower():
+            logger.warning(f"Host {fqdn} already exists in IPA — overwriting OTP.")
+        else:
+            logger.error(f"IPA Add Error for {fqdn}: {e}")
+            raise e
+
+    otp = vm_uuid
+    execute_ipa_command(client_ipa, "host_mod", fqdn, userpassword=otp)
+
+    # Return the OTP *AND* the server we actually talked to
+    return otp, connected_host
 
 
 # --- Action: Delete Host from IPA ---
