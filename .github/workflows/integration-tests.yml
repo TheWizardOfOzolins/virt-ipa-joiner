@@ -1,0 +1,168 @@
+name: Integration Tests
+
+# Run on every PR and on pushes to main.
+# The unit-test pipeline (pipeline.yaml) covers linting and unit tests;
+# this workflow focuses on real OS behaviour and IPA connectivity.
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+
+# ─────────────────────────────────────────────────────────────────────────────
+# JOB 1 — OS Cloud-Init Matrix
+#
+# One job per OS type. Each job mocks IPA and POSTs a synthetic AdmissionReview
+# to the webhook, then asserts the correct OS-specific install command was
+# injected into the cloud-init payload.
+#
+# No FreeIPA, no Kubernetes — fast (~1-2 min per job), runs in parallel.
+# Pass/fail appears per-OS in the GitHub Actions UI.
+# ─────────────────────────────────────────────────────────────────────────────
+jobs:
+  cloud-init-os-matrix:
+    name: "Cloud-Init: ${{ matrix.os.name }}"
+    runs-on: ubuntu-24.04
+    strategy:
+      fail-fast: false   # Run all OS types even if one fails
+      matrix:
+        os:
+          - name: "RHEL / CentOS"
+            preference: "rhel-9"
+            expected_cmd: "dnf install -y ipa-client"
+            blocked_cmd: "apt-get"
+
+          - name: "Fedora"
+            preference: "fedora-41"
+            expected_cmd: "dnf install -y ipa-client"
+            blocked_cmd: "apt-get"
+
+          - name: "Ubuntu"
+            preference: "ubuntu-22-04"
+            expected_cmd: "apt-get install -y freeipa-client"
+            blocked_cmd: "dnf install"
+
+          - name: "Debian"
+            preference: "debian-12"
+            expected_cmd: "apt-get install -y freeipa-client"
+            blocked_cmd: "dnf install"
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      # python-freeipa and kubernetes-asyncio need these system libs to compile.
+      - name: Install system dependencies
+        run: sudo apt-get install -y libldap2-dev libsasl2-dev libssl-dev
+
+      - name: Install Python dependencies
+        run: pip install --no-cache-dir -r requirements.txt -r requirements-test.txt
+
+      - name: "Test cloud-init injection — ${{ matrix.os.name }}"
+        env:
+          TEST_OS_PREFERENCE: ${{ matrix.os.preference }}
+          TEST_EXPECTED_CMD: ${{ matrix.os.expected_cmd }}
+          TEST_BLOCKED_CMD: ${{ matrix.os.blocked_cmd }}
+        run: PYTHONPATH=. pytest tests/integration/test_os_matrix.py::test_os_matrix_from_env -v
+
+# ─────────────────────────────────────────────────────────────────────────────
+# JOB 2 — IPA Lifecycle Integration
+#
+# Spins up a real FreeIPA server in a Podman container, then runs the IPA
+# service layer (ipa_host_add / ipa_host_del) against it to verify the full
+# host registration and cleanup lifecycle.
+#
+# FreeIPA takes ~3-4 minutes to initialise — this job is intentionally slow.
+# It is the ground truth that the app can talk to a real IPA server.
+#
+# NOTE: End-to-end VM boot testing (webhook → cloud-init → OS joins IPA)
+# requires KubeVirt and is planned for a future iteration.
+# ─────────────────────────────────────────────────────────────────────────────
+  ipa-lifecycle:
+    name: "IPA Lifecycle"
+    runs-on: ubuntu-24.04
+
+    steps:
+      - uses: actions/checkout@v4
+
+      # ── FreeIPA Setup ──────────────────────────────────────────────────────
+      - name: Add IPA hostname to /etc/hosts
+        run: echo "127.0.0.1 ipa.integration.test" | sudo tee -a /etc/hosts
+
+      - name: Start FreeIPA container
+        run: |
+          docker run -d \
+            --name freeipa-server \
+            --hostname ipa.integration.test \
+            --privileged \
+            --cgroupns=host \
+            -v /sys/fs/cgroup:/sys/fs/cgroup \
+            --tmpfs /run \
+            --tmpfs /tmp \
+            -e PASSWORD=Secret123! \
+            -p 443:443 \
+            docker.io/freeipa/freeipa-server:fedora-43 \
+            no-exit \
+            ipa-server-install \
+              --domain=integration.test \
+              --realm=INTEGRATION.TEST \
+              --ds-password=Secret123! \
+              --admin-password=Secret123! \
+              --no-ntp \
+              --skip-mem-check \
+              --unattended
+
+      - name: Wait for FreeIPA to be ready
+        timeout-minutes: 12
+        run: |
+          echo "Waiting for FreeIPA to initialize..."
+          for i in $(seq 1 72); do
+            # Check via HTTPS from the host — port 443 is published.
+            # IPA returns 200 on /ipa/ui/ once httpd and all services are up.
+            STATUS=$(curl -sk -o /dev/null -w "%{http_code}" https://ipa.integration.test/ipa/ui/ 2>/dev/null || true)
+            if [ "$STATUS" = "200" ]; then
+              echo "✅ FreeIPA ready after $((i * 10)) seconds (HTTP $STATUS)"
+              exit 0
+            fi
+            echo "⏳ Attempt $i/72 — HTTP $STATUS — waiting 10s..."
+            sleep 10
+          done
+          echo "❌ FreeIPA did not become ready within 12 minutes"
+          docker logs freeipa-server | tail -50
+          exit 1
+
+      # ── Python Setup ───────────────────────────────────────────────────────
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install system dependencies
+        run: sudo apt-get install -y libldap2-dev libsasl2-dev libssl-dev
+
+      - name: Install Python dependencies
+        run: pip install --no-cache-dir -r requirements.txt -r requirements-test.txt
+
+      # ── Tests ──────────────────────────────────────────────────────────────
+      - name: Run IPA lifecycle tests
+        env:
+          IPA_HOST: ipa.integration.test
+          IPA_USER: admin
+          IPA_PASS: Secret123!
+          IPA_VERIFY_SSL: "false"
+          DOMAIN: integration.test
+          REALM: INTEGRATION.TEST
+        run: PYTHONPATH=. pytest tests/integration/test_ipa_lifecycle.py -v
+
+      # ── Diagnostics (always run on failure) ────────────────────────────────
+      - name: Dump FreeIPA logs on failure
+        if: failure()
+        run: |
+          echo "=== Container stdout (last 50 lines) ==="
+          docker logs freeipa-server 2>&1 | tail -50
+          echo "=== ipa-server-install log (last 80 lines) ==="
+          docker exec freeipa-server cat /var/log/ipaserver-install.log 2>/dev/null | tail -80 || true
+          echo "=== pkispawn log (last 50 lines) ==="
+          docker exec freeipa-server find /var/log/pki -name "*.log" 2>/dev/null | head -3 | xargs -I{} sh -c 'echo "--- {} ---" && tail -30 {}' || true

@@ -96,15 +96,61 @@ To test the controller logic locally against a real K8s cluster and IPA server:
 
 ### Testing
 
-We use `pytest` for unit and logic testing.
+The test suite has three tiers, each covering a different layer of the stack.
+
+#### Tier 1 — Unit Tests
+
+Fast, no external dependencies. Run on every PR.
 
 ```bash
-# Run all tests
+# Run all unit tests
 pytest -v
 
-# Run specific intense worker tests
+# Run a specific module
 pytest -v app/tests/test_workers.py
 ```
+
+#### Tier 2 — Integration: Cloud-Init OS Matrix
+
+Verifies that the webhook injects the correct OS-specific `ipa-client-install` command into the cloud-init payload for each supported OS. IPA is mocked — no real server required.
+
+Run on every PR via GitHub Actions as a parallel matrix (one job per OS). Each job posts a synthetic `AdmissionReview` to the webhook and asserts the correct package manager command appears in the cloud-init `runcmd`.
+
+```bash
+# Run all OS types locally in a single pytest run
+PYTHONPATH=. pytest tests/integration/test_os_matrix.py -v
+
+# Run a single OS type (mirrors the matrix job)
+TEST_OS_PREFERENCE=ubuntu-22-04 \
+TEST_EXPECTED_CMD="apt-get install -y freeipa-client" \
+TEST_BLOCKED_CMD="dnf install" \
+PYTHONPATH=. pytest tests/integration/test_os_matrix.py::test_os_matrix_from_env -v
+```
+
+Supported OS values for `TEST_OS_PREFERENCE`: `rhel-9`, `fedora-41`, `ubuntu-22-04`, `debian-12`.
+
+#### Tier 3 — Integration: IPA Lifecycle
+
+Verifies the full host registration and cleanup lifecycle against a **real FreeIPA server**. Run on every PR via GitHub Actions (the CI spins up a FreeIPA container — expect ~5 min for this job).
+
+To run locally, point the variables at a real FreeIPA instance:
+
+```bash
+export IPA_HOST=ipa.example.com
+export IPA_USER=admin
+export IPA_PASS=yourpassword
+export IPA_VERIFY_SSL=false   # set to true in production
+export DOMAIN=example.com
+export REALM=EXAMPLE.COM
+
+PYTHONPATH=. pytest tests/integration/test_ipa_lifecycle.py -v
+```
+
+Tests covered: host add creates entry, OTP is set after enroll, host delete removes entry, both operations are idempotent, connectivity and ping.
+
+#### What is not yet tested
+
+End-to-end VM boot testing (webhook fires → cloud-init runs → OS joins IPA inside a real VM) requires KubeVirt and is planned for a future iteration.
 
 ## 📦 Container Build
 
