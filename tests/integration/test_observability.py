@@ -137,19 +137,32 @@ class TestPrometheusScrape:
         assert r.status_code == 200
 
     def test_app_target_is_up(self):
-        """The virt-ipa-joiner scrape target must show health=up in Prometheus."""
-        r = requests.get(f"{PROMETHEUS_URL}/api/v1/targets", timeout=10)
-        assert r.status_code == 200
+        """The virt-ipa-joiner scrape target must show health=up in Prometheus.
 
-        active = r.json()["data"]["activeTargets"]
-        # Find our target by job name (set in prometheus.yml)
-        target = next(
-            (t for t in active if t.get("labels", {}).get("job") == "virt-ipa-joiner"),
-            None,
-        )
+        Prometheus may not have completed its first scrape cycle immediately
+        after startup, so we poll for up to 15 seconds before failing.
+        """
+        deadline = time.time() + 15
+        target = None
+        while time.time() < deadline:
+            r = requests.get(f"{PROMETHEUS_URL}/api/v1/targets", timeout=10)
+            assert r.status_code == 200
+            active = r.json()["data"]["activeTargets"]
+            target = next(
+                (
+                    t
+                    for t in active
+                    if t.get("labels", {}).get("job") == "virt-ipa-joiner"
+                ),
+                None,
+            )
+            if target is not None:
+                break
+            time.sleep(1)
+
         assert target is not None, (
-            f"No virt-ipa-joiner target found in Prometheus. Active targets: "
-            f"{[t.get('labels', {}).get('job') for t in active]}"
+            "No virt-ipa-joiner target found in Prometheus after 15s. "
+            f"Active targets: {[t.get('labels', {}).get('job') for t in active]}"
         )
         assert target["health"] == "up", (
             f"virt-ipa-joiner target health is '{target['health']}', "
