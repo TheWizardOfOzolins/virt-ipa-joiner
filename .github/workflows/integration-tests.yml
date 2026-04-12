@@ -166,3 +166,155 @@ jobs:
           docker exec freeipa-server cat /var/log/ipaserver-install.log 2>/dev/null | tail -80 || true
           echo "=== pkispawn log (last 50 lines) ==="
           docker exec freeipa-server find /var/log/pki -name "*.log" 2>/dev/null | head -3 | xargs -I{} sh -c 'echo "--- {} ---" && tail -30 {}' || true
+
+# ─────────────────────────────────────────────────────────────────────────────
+# JOB 3 — Observability (Health Probes + Prometheus Scraping)
+#
+# Starts the app via uvicorn and a Prometheus container, then verifies:
+#   • /healthz and /readyz return the correct status codes and bodies
+#   • /metrics returns valid Prometheus text exposition format
+#   • Prometheus can scrape /metrics and stores the expected time-series
+#
+# No FreeIPA or Kubernetes cluster is required — a fake kubeconfig keeps the
+# controller task alive in its retry loop so the liveness probe is happy.
+# ─────────────────────────────────────────────────────────────────────────────
+  observability:
+    name: "Observability (Health + Prometheus)"
+    runs-on: ubuntu-24.04
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install system dependencies
+        run: sudo apt-get install -y libldap2-dev libsasl2-dev libssl-dev
+
+      - name: Install Python dependencies
+        run: pip install --no-cache-dir -r requirements.txt -r requirements-test.txt
+
+      # ── App Setup ──────────────────────────────────────────────────────────
+      # A minimal kubeconfig pointing at a non-existent cluster lets
+      # kubernetes_asyncio load config successfully. The controller then enters
+      # its retry loop (connection refused to localhost:6443) and the asyncio
+      # task stays alive, so /healthz returns 200.
+      - name: Create fake kubeconfig
+        run: |
+          mkdir -p "$HOME/.kube"
+          cat > "$HOME/.kube/config" <<'KUBEEOF'
+          apiVersion: v1
+          clusters:
+          - cluster:
+              server: https://localhost:6443
+            name: fake
+          contexts:
+          - context:
+              cluster: fake
+              user: fake
+            name: fake
+          current-context: fake
+          kind: Config
+          preferences: {}
+          users:
+          - name: fake
+            user:
+              token: fake-token
+          KUBEEOF
+
+      - name: Start app
+        run: |
+          DOMAIN=test.local \
+          IPA_HOST=localhost \
+          IPA_USER=admin \
+          IPA_PASS=fake \
+          PYTHONPATH=. \
+          uvicorn app.main:app --host 0.0.0.0 --port 8080 \
+            > /tmp/uvicorn.log 2>&1 &
+          echo $! > /tmp/uvicorn.pid
+
+      - name: Wait for app to start
+        run: |
+          echo "Waiting for app to accept connections..."
+          for i in $(seq 1 30); do
+            # /metrics is always available regardless of controller state
+            if curl -sf http://localhost:8080/metrics > /dev/null 2>&1; then
+              echo "✅ App is up after ${i}s"
+              exit 0
+            fi
+            sleep 1
+          done
+          echo "❌ App did not start within 30 seconds"
+          cat /tmp/uvicorn.log
+          exit 1
+
+      # Allow the controller's first K8s connection attempt to fail and settle
+      # into its retry sleep so the liveness probe returns 200.
+      - name: Allow controller retry loop to stabilise
+        run: sleep 6
+
+      # ── Prometheus Setup ───────────────────────────────────────────────────
+      - name: Write Prometheus scrape config
+        run: |
+          cat > /tmp/prometheus.yml <<'PROMEOF'
+          global:
+            scrape_interval: 5s
+            evaluation_interval: 5s
+
+          scrape_configs:
+            - job_name: 'virt-ipa-joiner'
+              static_configs:
+                - targets: ['localhost:8080']
+          PROMEOF
+
+      # --network=host lets the Prometheus container reach localhost:8080 on
+      # the runner without needing bridge networking or extra host entries.
+      - name: Start Prometheus
+        run: |
+          docker run -d \
+            --name prometheus \
+            --network=host \
+            -v /tmp/prometheus.yml:/etc/prometheus/prometheus.yml \
+            prom/prometheus:latest \
+            --config.file=/etc/prometheus/prometheus.yml \
+            --web.listen-address=:9090
+
+      - name: Wait for Prometheus to be ready
+        run: |
+          echo "Waiting for Prometheus..."
+          for i in $(seq 1 30); do
+            if curl -sf http://localhost:9090/-/ready > /dev/null 2>&1; then
+              echo "✅ Prometheus ready after ${i}s"
+              exit 0
+            fi
+            sleep 1
+          done
+          echo "❌ Prometheus did not become ready within 30 seconds"
+          docker logs prometheus | tail -20
+          exit 1
+
+      # ── Generate traffic so metrics have samples ───────────────────────────
+      - name: Warm up metrics
+        run: |
+          for endpoint in /healthz /readyz /metrics; do
+            curl -sf "http://localhost:8080${endpoint}" > /dev/null || true
+          done
+
+      # ── Tests ──────────────────────────────────────────────────────────────
+      - name: Run observability integration tests
+        env:
+          APP_BASE_URL: http://localhost:8080
+          PROMETHEUS_URL: http://localhost:9090
+        run: PYTHONPATH=. pytest tests/integration/test_observability.py -v
+
+      # ── Diagnostics ────────────────────────────────────────────────────────
+      - name: Dump logs on failure
+        if: failure()
+        run: |
+          echo "=== App (uvicorn) log ==="
+          cat /tmp/uvicorn.log || true
+          echo "=== Prometheus log ==="
+          docker logs prometheus 2>&1 | tail -30 || true
+          echo "=== Prometheus targets ==="
+          curl -s http://localhost:9090/api/v1/targets | python3 -m json.tool || true

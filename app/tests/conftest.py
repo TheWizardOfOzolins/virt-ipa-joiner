@@ -20,6 +20,16 @@ sys.modules["kubernetes_asyncio"] = mock_k8s_module
 sys.modules["python_freeipa"] = MagicMock()
 
 
+@pytest.fixture(autouse=True)
+def reset_k8s_config():
+    """Reset the K8s config-loaded flag before every test so tests are order-independent."""
+    import app.services.k8s as k8s_module
+
+    k8s_module._k8s_config_loaded = False
+    yield
+    k8s_module._k8s_config_loaded = False
+
+
 @pytest.fixture
 def mock_ipa_client(mocker):
     """Mocks the internal IPA client wrapper. Returns the mock client object."""
