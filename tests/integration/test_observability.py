@@ -142,7 +142,7 @@ class TestPrometheusScrape:
         Prometheus may not have completed its first scrape cycle immediately
         after startup, so we poll for up to 15 seconds before failing.
         """
-        deadline = time.time() + 15
+        deadline = time.time() + 20
         target = None
         while time.time() < deadline:
             r = requests.get(f"{PROMETHEUS_URL}/api/v1/targets", timeout=10)
@@ -156,7 +156,8 @@ class TestPrometheusScrape:
                 ),
                 None,
             )
-            if target is not None:
+            # "unknown" means discovered but not yet scraped — keep waiting.
+            if target is not None and target.get("health") != "unknown":
                 break
             time.sleep(1)
 
