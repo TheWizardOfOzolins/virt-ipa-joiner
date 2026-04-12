@@ -3,11 +3,24 @@ import datetime
 from typing import Dict, Any, cast
 from kubernetes_asyncio import client, config, watch
 
-# Import shared config
 from app.config import CONFIG, logger
-
-# Import IPA actions needed for the polling/deletion logic
 from app.services.ipa import ipa_host_del, get_ipa_client, execute_ipa_command
+
+# ---------------------------------------------------------------------------
+# K8s config — loaded once, reused everywhere.
+# ---------------------------------------------------------------------------
+_k8s_config_loaded = False
+
+
+async def _ensure_k8s_config() -> None:
+    global _k8s_config_loaded
+    if _k8s_config_loaded:
+        return
+    try:
+        config.load_incluster_config()
+    except Exception:
+        await config.load_kube_config()
+    _k8s_config_loaded = True
 
 
 # --- HELPER: K8s Event Sender ---
@@ -21,10 +34,7 @@ async def send_k8s_event(
     api_version="kubevirt.io/v1",
 ):
     try:
-        try:
-            config.load_incluster_config()
-        except Exception:
-            await config.load_kube_config()
+        await _ensure_k8s_config()
 
         async with client.ApiClient() as api_client:
             core_api = client.CoreV1Api(api_client)
@@ -53,7 +63,6 @@ async def send_k8s_event(
                 "count": 1,
             }
 
-            # type: ignore prevents Pylance from flagging the coroutine as not awaitable
             await core_api.create_namespaced_event(namespace, event)  # type: ignore
 
     except Exception as e:
@@ -65,21 +74,21 @@ async def send_delayed_creation_event(
     namespace, name, reason, message, event_type="Normal"
 ):
     """
-    Polls K8s until the VM is found (persisted), then sends the event linked to its real UID.
+    Polls K8s until the VM is found (persisted), then sends the event linked
+    to its real UID. Uses exponential backoff (2 → 30 s, max 10 attempts).
     """
     logger.info(f"Background task: Waiting for creation of {name} to attach event...")
-    for attempt in range(5):
-        await asyncio.sleep(2)
-        try:
-            try:
-                config.load_incluster_config()
-            except Exception:
-                await config.load_kube_config()
+    await _ensure_k8s_config()
 
+    delay = 2
+    for attempt in range(10):
+        await asyncio.sleep(delay)
+        delay = min(delay * 2, 30)
+
+        try:
             async with client.ApiClient() as api_client:
                 cust_api = client.CustomObjectsApi(api_client)
                 try:
-                    # type: ignore fixes Pylance "not awaitable" error
                     raw_vm = await cust_api.get_namespaced_custom_object(
                         group="kubevirt.io",
                         version="v1",
@@ -122,12 +131,13 @@ async def send_delayed_creation_event(
             logger.error(f"Error in delayed event loop for {name}: {e}")
 
     logger.warning(
-        f"Gave up waiting for VM {name} to appear after 10 seconds. Event '{reason}' was dropped."
+        f"Gave up waiting for VM {name} after 10 attempts. Event '{reason}' was dropped."
     )
 
 
 # --- HELPER: Check Existing Event ---
 async def event_already_exists(namespace, uid, reason):
+    await _ensure_k8s_config()
     try:
         async with client.ApiClient() as api_client:
             core_api = client.CoreV1Api(api_client)
@@ -170,7 +180,6 @@ async def poll_ipa_keytab(namespace, name, fqdn, timeout_minutes=15):
     end_time = datetime.datetime.now() + datetime.timedelta(minutes=timeout_minutes)
 
     try:
-        # UPDATED: Unpack the tuple (client, hostname)
         c, _ = get_ipa_client()
     except Exception as e:
         logger.error(f"Failed to create IPA client for polling: {e}")
@@ -201,7 +210,6 @@ async def poll_ipa_keytab(namespace, name, fqdn, timeout_minutes=15):
                     return
 
         except Exception as e:
-            # UPDATED: Log as warning so we see the root cause (e.g. "auth failed")
             logger.warning(f"Polling check failed for {fqdn}: {e}")
             try:
                 logger.info("Attempting to switch/reconnect IPA client...")
@@ -242,10 +250,7 @@ async def check_should_enroll(vm_object, namespace):
     logger.info(f"Checking InstanceType {it_name} ({it_kind}) for inheritance...")
 
     try:
-        try:
-            config.load_incluster_config()
-        except Exception:
-            await config.load_kube_config()
+        await _ensure_k8s_config()
 
         async with client.ApiClient() as api_client:
             api = client.CustomObjectsApi(api_client)
@@ -287,11 +292,9 @@ async def check_should_enroll(vm_object, namespace):
 # --- MAIN CONTROLLER LOOP ---
 async def run_controller():
     logger.info("Starting Controller Watcher...")
-    try:
-        config.load_incluster_config()
-    except Exception:
-        await config.load_kube_config()
+    await _ensure_k8s_config()
 
+    backoff = 5
     while True:
         try:
             async with client.ApiClient() as api_client:
@@ -337,7 +340,6 @@ async def run_controller():
 
                         logger.info(f"Processing deletion for {name}.{ns}...")
                         try:
-                            # Calls IPA service to delete
                             ipa_host_del(name, ns)
                             await send_k8s_event(
                                 ns,
@@ -364,6 +366,10 @@ async def run_controller():
                                     api_version=obj_api_version,
                                 )
 
+            # Clean stream exit (60 s timeout) — reset backoff.
+            backoff = 5
+
         except Exception as e:
-            logger.error(f"Watcher stream error: {e}. Restarting...")
-            await asyncio.sleep(5)
+            logger.error(f"Watcher stream error: {e}. Restarting in {backoff}s...")
+            await asyncio.sleep(backoff)
+            backoff = min(backoff * 2, 60)

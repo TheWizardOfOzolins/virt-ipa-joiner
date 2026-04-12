@@ -124,19 +124,44 @@ class TestIPAHostLifecycle:
         # Never added — delete should be a no-op
         ipa_host_del(vm_name, namespace)
 
-    def test_host_add_is_idempotent(self):
-        """Adding a host that already exists should succeed (overwrites OTP)."""
+    def test_host_add_is_idempotent_when_not_enrolled(self):
+        """Adding a host that exists but has no keytab should overwrite the OTP."""
         vm_name, namespace, vm_uuid = _unique_vm()
 
         ipa_host_add(vm_name, namespace, vm_uuid)
 
-        # Second add with a new UUID — should overwrite OTP, not raise
+        # Second add with a new UUID — not enrolled, so should overwrite OTP silently
         new_uuid = str(uuid.uuid4())
         otp, server = ipa_host_add(vm_name, namespace, new_uuid)
         assert otp == new_uuid
 
         # Cleanup
         ipa_host_del(vm_name, namespace)
+
+    def test_host_add_refuses_to_overwrite_enrolled_host(self):
+        """Adding a host that has already enrolled (keytab present) must raise."""
+        vm_name, namespace, vm_uuid = _unique_vm()
+        fqdn = build_fqdn(vm_name, namespace)
+
+        ipa_host_add(vm_name, namespace, vm_uuid)
+
+        # Simulate enrollment by setting has_keytab via host-mod on the IPA side
+        client, _ = get_ipa_client()
+        execute_ipa_command(client, "host_mod", fqdn, userpassword=None, random=True)
+        # Mark as having a keytab by provisioning one via getkeytab (simplest way
+        # to flip has_keytab=True without a real client install is to use the
+        # IPA CLI inside the container — skip if we can't confirm the flag)
+        host_data = execute_ipa_command(client, "host_show", fqdn)
+        result = host_data.get("result", {}) if isinstance(host_data, dict) else {}
+        if not result.get("has_keytab"):
+            ipa_host_del(vm_name, namespace)
+            pytest.skip("Cannot simulate keytab presence without a real client enroll")
+
+        try:
+            with pytest.raises(RuntimeError, match="already enrolled"):
+                ipa_host_add(vm_name, namespace, str(uuid.uuid4()))
+        finally:
+            ipa_host_del(vm_name, namespace)
 
     def test_fqdn_format(self):
         """FQDN should follow the vmname.namespace.domain pattern."""

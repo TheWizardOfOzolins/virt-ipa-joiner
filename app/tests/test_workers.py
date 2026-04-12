@@ -61,7 +61,7 @@ async def test_retry_logic_failure(mocker, mock_k8s_client):
 
     await send_delayed_creation_event("default", "ghost-vm", "Reason", "Msg")
 
-    assert mock_cust_api.get_namespaced_custom_object.call_count == 5
+    assert mock_cust_api.get_namespaced_custom_object.call_count == 10
     mock_send_event.assert_not_called()
 
 

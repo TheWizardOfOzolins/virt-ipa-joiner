@@ -41,10 +41,76 @@ This will create or update the necessary resources in the openshift-cnv namespac
 
 ## Verification
 
-And check that the associated pods are running:
+Check that the associated pods are running:
 
 ```bash
 oc get pods -n openshift-cnv
+```
+
+Verify the health endpoints directly from within the cluster (the app is HTTPS-only):
+
+```bash
+# Liveness — is the controller task running?
+curl -k https://<pod-ip>:8443/healthz
+
+# Readiness — is the controller running AND was IPA reachable on the last attempt?
+curl -k https://<pod-ip>:8443/readyz
+```
+
+Both return `{"status":"ok"}` / `{"status":"ready"}` on success, or HTTP 503 with a detail message on failure.
+
+## Health Probes
+
+The application exposes two distinct probe endpoints, both on HTTPS port 8443:
+
+| Endpoint | Probe type | Fails when |
+| :--- | :--- | :--- |
+| `/healthz` | Liveness | The background controller task has exited unexpectedly |
+| `/readyz` | Readiness | The controller is not running **or** IPA was unreachable on the last connection attempt |
+
+The Kustomize base wires these up automatically. The key distinction: if IPA goes temporarily offline, pods report not-ready (traffic stops routing to them) but are **not** restarted — they recover automatically once IPA comes back.
+
+## Observability
+
+The application exposes a Prometheus-compatible `/metrics` endpoint on the same HTTPS port (8443). It provides standard HTTP instrumentation for all routes:
+
+- `http_requests_total` — request count by method, route, and status code
+- `http_request_duration_seconds` — latency histogram
+- `http_request_size_bytes` / `http_response_size_bytes` — payload size histograms
+
+### Scraping with Prometheus Operator (OpenShift)
+
+The app uses the OpenShift serving cert (signed by the cluster CA), so a `ServiceMonitor` can scrape it without disabling TLS verification:
+
+```yaml
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: virt-ipa-joiner
+  namespace: openshift-cnv
+spec:
+  selector:
+    matchLabels:
+      app: virt-ipa-joiner
+  endpoints:
+    - port: https        # must match the port name in the Service
+      scheme: https
+      tlsConfig:
+        caFile: /etc/prometheus/configmaps/serving-certs-ca-bundle/service-ca.crt
+      interval: 30s
+      path: /metrics
+```
+
+> **Note:** For this to work, add a named port to the `Service` and ensure the OpenShift user-workload monitoring stack is enabled (`enableUserWorkload: true` in the `cluster-monitoring-config` ConfigMap).
+
+### Adding a named port to the Service
+
+```yaml
+spec:
+  ports:
+    - name: https
+      port: 443
+      targetPort: 8443
 ```
 
 ## Configuration options

@@ -78,8 +78,8 @@ async def test_mutate_vm_success(mocker):
     # Mock K8s checks (Always say yes to enrollment)
     mocker.patch("app.routers.webhook.check_should_enroll", return_value=True)
 
-    # Mock Background Tasks (so we don't actually spawn threads)
-    mocker.patch("fastapi.BackgroundTasks.add_task")
+    # Prevent background tasks from actually being scheduled.
+    mocker.patch("app.routers.webhook.create_tracked_task")
 
     # 2. Make the Request
     response = client.post("/mutate", json=SAMPLE_REVIEW)
@@ -207,3 +207,41 @@ def test_cloud_init_syntax_validity(mocker):
     # Verify structure
     assert "runcmd" in parsed
     assert isinstance(parsed["runcmd"], list)
+
+
+def test_mutate_vm_realm_fallback(mocker):
+    """
+    Verifies that when REALM is not configured (None), ipa-client-install
+    receives --realm=<DOMAIN.upper()> rather than --realm=None.
+    """
+    mocker.patch(
+        "app.routers.webhook.ipa_host_add",
+        return_value=("otp-realm-test", "ipa-server.example.com"),
+    )
+    mocker.patch("app.routers.webhook.check_should_enroll", return_value=True)
+    mocker.patch("app.routers.webhook.create_tracked_task")
+
+    # Simulate the default state: REALM not set, DOMAIN = "example.com"
+    mocker.patch.dict(
+        "app.routers.webhook.CONFIG",
+        {"REALM": None, "DOMAIN": "example.com"},
+    )
+
+    response = client.post("/mutate", json=SAMPLE_REVIEW)
+    assert response.status_code == 200
+    data = response.json()
+    assert data["response"]["allowed"] is True
+
+    patch_decoded = base64.b64decode(data["response"]["patch"]).decode()
+    patch_obj = json.loads(patch_decoded)
+
+    volume_patch = next(
+        (op for op in patch_obj if "volumes" in op.get("path", "")), None
+    )
+    assert volume_patch is not None
+
+    user_data = volume_patch["value"]["cloudInitNoCloud"]["userData"]
+
+    # Must contain the uppercased domain, not the string "None".
+    assert "--realm=EXAMPLE.COM" in user_data
+    assert "--realm=None" not in user_data
