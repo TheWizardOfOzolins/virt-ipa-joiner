@@ -24,6 +24,7 @@ sys.modules["python_freeipa"] = MagicMock()
 def reset_k8s_config():
     """Reset the K8s config-loaded flag before every test so tests are order-independent."""
     import app.services.k8s as k8s_module
+
     k8s_module._k8s_config_loaded = False
     yield
     k8s_module._k8s_config_loaded = False
