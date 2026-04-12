@@ -1,5 +1,6 @@
 from python_freeipa import Client
 from app.config import CONFIG, logger
+from app.health import set_ipa_healthy
 from typing import List, Tuple, Any
 import datetime
 import random
@@ -102,13 +103,11 @@ def get_ipa_client() -> Tuple[Any, str]:
         try:
             logger.debug(f"Attempting connection to FreeIPA server: {host}")
 
-            # Initialize Client
             c = Client(host=host, verify_ssl=CONFIG["IPA_VERIFY_SSL"])
             c.login(CONFIG["IPA_USER"], CONFIG["IPA_PASS"])
 
             logger.info(f"Successfully authenticated to {host}")
-
-            # Return BOTH the client and the hostname string we connected to
+            set_ipa_healthy(True)
             return c, host
 
         except Exception as e:
@@ -116,15 +115,15 @@ def get_ipa_client() -> Tuple[Any, str]:
             errors.append(f"{host}: {str(e)}")
             continue  # Try the next server
 
-    # If loop finishes without returning, we failed everywhere
+    # All candidates failed.
+    set_ipa_healthy(False)
     raise RuntimeError(f"All IPA connection attempts failed. Errors: {errors}")
 
 
 # --- Helper: Robust Command Executor ---
 def execute_ipa_command(client, command, *args, **kwargs):
+    """Execute an IPA command, falling back to direct JSON-RPC on AttributeError."""
     try:
-        if hasattr(client, command):
-            return getattr(client, command)(*args, **kwargs)
         return getattr(client, command)(*args, **kwargs)
     except AttributeError:
         return client._request(command, list(args), kwargs)
@@ -145,11 +144,21 @@ def ipa_host_add(vm_name: str, namespace: str, vm_uuid: str) -> Tuple[str, str]:
             client_ipa, "host_add", fqdn, force=True, description=desc_text
         )
     except Exception as e:
+        # Idempotency: treat a duplicate-entry error as a non-fatal warning.
+        # This happens when K8s retries an admission request for the same VM.
         if "already exists" in str(e).lower() or "duplicate" in str(e).lower():
-            logger.warning(f"Host {fqdn} already exists in IPA — overwriting OTP.")
+            result = execute_ipa_command(client_ipa, "host_show", fqdn)
+            host_data = result.get("result", {}) if isinstance(result, dict) else {}
+            if host_data.get("has_keytab"):
+                raise RuntimeError(
+                    f"Host {fqdn} is already enrolled in IPA (keytab present). "
+                    "Delete the existing IPA host entry before re-registering."
+                ) from e
+            logger.warning(
+                f"Host {fqdn} pre-registered but not enrolled — overwriting OTP."
+            )
         else:
-            logger.error(f"IPA Add Error for {fqdn}: {e}")
-            raise e
+            raise
 
     otp = vm_uuid
     execute_ipa_command(client_ipa, "host_mod", fqdn, userpassword=otp)

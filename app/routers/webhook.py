@@ -2,8 +2,9 @@ import base64
 import jsonpatch
 import yaml
 from typing import Dict, Any
-from fastapi import APIRouter, Body, BackgroundTasks
+from fastapi import APIRouter, Body
 from app.config import CONFIG, logger
+from app.task_tracker import create_tracked_task
 from app.services.k8s import (
     check_should_enroll,
     send_delayed_creation_event,
@@ -15,9 +16,7 @@ router = APIRouter()
 
 
 @router.post("/mutate")
-async def mutate_vm(
-    background_tasks: BackgroundTasks, review: Dict[str, Any] = Body(...)
-):
+async def mutate_vm(review: Dict[str, Any] = Body(...)):
     request = review.get("request")
     if not request:
         return {
@@ -99,28 +98,30 @@ async def mutate_vm(
         status_msg = f"Enrolled as {fqdn}"
 
         # Send "Started" Event
-        background_tasks.add_task(
-            send_delayed_creation_event,
-            namespace,
-            vm_name,
-            "IPAEnrollSuccess",
-            f"Successfully pre-created host {fqdn} in IPA",
-            "Normal",
+        create_tracked_task(
+            send_delayed_creation_event(
+                namespace,
+                vm_name,
+                "IPAEnrollSuccess",
+                f"Successfully pre-created host {fqdn} in IPA",
+                "Normal",
+            )
         )
 
         # Start "Finished" Watcher (Keytab Polling)
-        background_tasks.add_task(poll_ipa_keytab, namespace, vm_name, fqdn)
+        create_tracked_task(poll_ipa_keytab(namespace, vm_name, fqdn))
 
     except Exception as e:
         enrollment_success = False
         status_msg = f"Failed: {str(e)}"
-        background_tasks.add_task(
-            send_delayed_creation_event,
-            namespace,
-            vm_name,
-            "IPAEnrollFailed",
-            f"Failed to pre-create host in IPA: {str(e)}",
-            "Warning",
+        create_tracked_task(
+            send_delayed_creation_event(
+                namespace,
+                vm_name,
+                "IPAEnrollFailed",
+                f"Failed to pre-create host in IPA: {str(e)}",
+                "Warning",
+            )
         )
 
     if enrollment_success:
@@ -146,7 +147,7 @@ async def mutate_vm(
                 install_cmd_str = os_cmd
                 break
 
-        realm_arg = CONFIG.get("REALM", CONFIG["DOMAIN"].upper())
+        realm_arg = CONFIG.get("REALM") or CONFIG["DOMAIN"].upper()
 
         ipa_cmd_parts = [
             "ipa-client-install",

@@ -22,9 +22,12 @@ sys.modules["python_freeipa"] = MagicMock()
 
 @pytest.fixture
 def mock_ipa_client(mocker):
-    """Mocks the internal IPA client wrapper."""
+    """Mocks the internal IPA client wrapper. Returns the mock client object."""
     mock_client = MagicMock()
-    mocker.patch("app.services.ipa.get_ipa_client", return_value=mock_client)
+    mocker.patch(
+        "app.services.ipa.get_ipa_client",
+        return_value=(mock_client, "ipa.example.com"),
+    )
     return mock_client
 
 

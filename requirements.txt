@@ -5,3 +5,4 @@ jsonpatch==1.33
 kubernetes_asyncio==33.3.0
 PyYAML==6.0.3
 dnspython==2.8.0
+prometheus-fastapi-instrumentator==7.1.0

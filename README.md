@@ -11,6 +11,8 @@ The application consists of two main components running in a single container:
 1. **Mutating Webhook (FastAPI):** Intercepts `VirtualMachine` creation requests. It pre-creates the host in FreeIPA, generates an OTP, and injects a `cloud-init` script into the VM to install the IPA client automatically on first boot.
 2. **Lifecycle Controller (AsyncIO):** Watches for VM deletion events to remove the host from FreeIPA. It also polls newly created VMs to verify that the enrollment was successful (checking for Keytab existence).
 
+The application also exposes `/healthz` (liveness), `/readyz` (readiness — additionally checks IPA reachability), and `/metrics` (Prometheus) on the same HTTPS port.
+
 ## 🔄 Order of Events
 
 ### Phase 1: VM Creation & Enrollment
@@ -35,7 +37,7 @@ The application consists of two main components running in a single container:
 * **Dynamic OS Support:** Automatically detects OS (RHEL/CentOS/Fedora vs Ubuntu/Debian) based on `instancetype` or `preference` and adjusts install commands (`dnf` vs `apt-get`).
 * **InstanceType Inheritance:** Supports inheriting enrollment labels from `VirtualMachineClusterInstanceType`.
 * **Security:** Runs as a non-root user (UID 1001) on Red Hat UBI 9.
-* **Observability:** Emits native Kubernetes Events (`Normal` and `Warning`) to the VM object for enrollment status.
+* **Observability:** Emits native Kubernetes Events (`Normal` and `Warning`) to the VM object for enrollment status. Exposes a Prometheus `/metrics` endpoint (HTTP request counts, latency, and sizes) and separate `/healthz` (liveness) and `/readyz` (readiness) probes.
 
 ## 🚀 Deployment
 
