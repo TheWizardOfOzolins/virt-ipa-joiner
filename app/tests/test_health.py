@@ -6,7 +6,6 @@ IPA health flag are patched directly so tests cover every branch without
 needing a real Kubernetes cluster or FreeIPA server.
 """
 
-import pytest
 from unittest.mock import MagicMock
 from fastapi.testclient import TestClient
 

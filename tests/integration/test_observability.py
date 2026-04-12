@@ -173,7 +173,9 @@ class TestPrometheusScrape:
 
         r = requests.get(
             f"{PROMETHEUS_URL}/api/v1/query",
-            params={"query": 'http_request_duration_seconds_count{job="virt-ipa-joiner"}'},
+            params={
+                "query": 'http_request_duration_seconds_count{job="virt-ipa-joiner"}'
+            },
             timeout=10,
         )
         assert r.status_code == 200
