@@ -175,7 +175,11 @@ async def remove_finalizer(api, namespace, name, current_finalizers):
 
 
 # --- HELPER: Poll IPA Keytab (Success Verification) ---
-async def poll_ipa_keytab(namespace, name, fqdn, timeout_minutes=15):
+async def poll_ipa_keytab(
+    namespace, name, fqdn, timeout_minutes: int | None = None
+):
+    if timeout_minutes is None:
+        timeout_minutes = int(CONFIG.get("KEYTAB_POLL_TIMEOUT_MINUTES", 15))
     logger.info(f"Starting Keytab watcher for {fqdn} (Timeout: {timeout_minutes}m)")
     end_time = datetime.datetime.now() + datetime.timedelta(minutes=timeout_minutes)
 

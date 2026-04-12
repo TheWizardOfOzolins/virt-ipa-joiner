@@ -1,5 +1,6 @@
 import pytest
 from fastapi.testclient import TestClient
+from unittest.mock import MagicMock
 from app.main import app
 import base64
 import json
@@ -79,7 +80,10 @@ async def test_mutate_vm_success(mocker):
     mocker.patch("app.routers.webhook.check_should_enroll", return_value=True)
 
     # Prevent background tasks from actually being scheduled.
+    # Also mock the coroutine-returning functions so they don't create unawaited coroutines.
     mocker.patch("app.routers.webhook.create_tracked_task")
+    mocker.patch("app.routers.webhook.poll_ipa_keytab", new=MagicMock())
+    mocker.patch("app.routers.webhook.send_delayed_creation_event", new=MagicMock())
 
     # 2. Make the Request
     response = client.post("/mutate", json=SAMPLE_REVIEW)
@@ -123,7 +127,9 @@ async def test_mutate_vm_os_detection(mocker):
         return_value=("otp-ubuntu", "ipa-server-1.example.com"),
     )
     mocker.patch("app.routers.webhook.check_should_enroll", return_value=True)
-    mocker.patch("fastapi.BackgroundTasks.add_task")
+    mocker.patch("app.routers.webhook.create_tracked_task")
+    mocker.patch("app.routers.webhook.poll_ipa_keytab", new=MagicMock())
+    mocker.patch("app.routers.webhook.send_delayed_creation_event", new=MagicMock())
 
     # 2. Create a request with an "Ubuntu" preference
     ubuntu_review = {
@@ -184,7 +190,9 @@ def test_cloud_init_syntax_validity(mocker):
         return_value=("otp", "ipa-server-1.example.com"),
     )
     mocker.patch("app.routers.webhook.check_should_enroll", return_value=True)
-    mocker.patch("fastapi.BackgroundTasks.add_task")
+    mocker.patch("app.routers.webhook.create_tracked_task")
+    mocker.patch("app.routers.webhook.poll_ipa_keytab", new=MagicMock())
+    mocker.patch("app.routers.webhook.send_delayed_creation_event", new=MagicMock())
 
     response = client.post("/mutate", json=SAMPLE_REVIEW)
     data = response.json()
@@ -220,6 +228,8 @@ def test_mutate_vm_realm_fallback(mocker):
     )
     mocker.patch("app.routers.webhook.check_should_enroll", return_value=True)
     mocker.patch("app.routers.webhook.create_tracked_task")
+    mocker.patch("app.routers.webhook.poll_ipa_keytab", new=MagicMock())
+    mocker.patch("app.routers.webhook.send_delayed_creation_event", new=MagicMock())
 
     # Simulate the default state: REALM not set, DOMAIN = "example.com"
     mocker.patch.dict(
