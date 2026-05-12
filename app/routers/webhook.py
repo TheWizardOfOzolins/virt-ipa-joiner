@@ -147,7 +147,7 @@ async def mutate_vm(review: Dict[str, Any] = Body(...)):
                 install_cmd_str = os_cmd
                 break
 
-        realm_arg = CONFIG.get("REALM") or CONFIG["DOMAIN"].upper()
+        realm_arg = (CONFIG.get("REALM") or CONFIG["DOMAIN"]).upper()
 
         ipa_cmd_parts = [
             "ipa-client-install",
