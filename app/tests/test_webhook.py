@@ -255,3 +255,38 @@ def test_mutate_vm_realm_fallback(mocker):
     # Must contain the uppercased domain, not the string "None".
     assert "--realm=EXAMPLE.COM" in user_data
     assert "--realm=None" not in user_data
+
+
+def test_mutate_vm_realm_lowercased_is_normalised(mocker):
+    """
+    Verifies that a lowercase REALM value is upper-cased before being passed
+    to ipa-client-install. IPA stores realms uppercased, so a lowercase value
+    causes 'realm does not match any realm in LDAP database' on enrolment.
+    """
+    mocker.patch(
+        "app.routers.webhook.ipa_host_add",
+        return_value=("otp-realm-test", "ipa-server.example.com"),
+    )
+    mocker.patch("app.routers.webhook.check_should_enroll", return_value=True)
+    mocker.patch("app.routers.webhook.create_tracked_task")
+    mocker.patch("app.routers.webhook.poll_ipa_keytab", new=MagicMock())
+    mocker.patch("app.routers.webhook.send_delayed_creation_event", new=MagicMock())
+
+    mocker.patch.dict(
+        "app.routers.webhook.CONFIG",
+        {"REALM": "lab.example.com", "DOMAIN": "lab.example.com"},
+    )
+
+    response = client.post("/mutate", json=SAMPLE_REVIEW)
+    assert response.status_code == 200
+
+    patch_decoded = base64.b64decode(response.json()["response"]["patch"]).decode()
+    patch_obj = json.loads(patch_decoded)
+    volume_patch = next(
+        (op for op in patch_obj if "volumes" in op.get("path", "")), None
+    )
+    assert volume_patch is not None
+
+    user_data = volume_patch["value"]["cloudInitNoCloud"]["userData"]
+    assert "--realm=LAB.EXAMPLE.COM" in user_data
+    assert "--realm=lab.example.com" not in user_data
