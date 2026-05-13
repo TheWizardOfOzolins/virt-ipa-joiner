@@ -57,10 +57,19 @@ async def mutate_vm(review: Dict[str, Any] = Body(...)):
             "response": {"uid": admission_uid, "allowed": True},
         }
 
-    # Construct the target FQDN early to validate it
-    fqdn = build_fqdn(vm_name, namespace)
+    should_enroll = await check_should_enroll(vm_object, namespace)
 
+    if not should_enroll:
+        return {
+            "apiVersion": "admission.k8s.io/v1",
+            "kind": "AdmissionReview",
+            "response": {"uid": admission_uid, "allowed": True},
+        }
+
+    # Only enforce the FQDN length budget on VMs we actually enrol —
+    # unrelated VMs with long names must never be blocked by us.
     # Linux HOST_NAME_MAX is typically 64.
+    fqdn = build_fqdn(vm_name, namespace)
     if len(fqdn) > 64:
         error_msg = f"Generated FQDN '{fqdn}' is {len(fqdn)} chars. Max allowed is 64."
         logger.warning(f"Rejected VM {vm_name}: {error_msg}")
@@ -72,15 +81,6 @@ async def mutate_vm(review: Dict[str, Any] = Body(...)):
                 "allowed": False,
                 "status": {"message": error_msg, "code": 400},
             },
-        }
-
-    should_enroll = await check_should_enroll(vm_object, namespace)
-
-    if not should_enroll:
-        return {
-            "apiVersion": "admission.k8s.io/v1",
-            "kind": "AdmissionReview",
-            "response": {"uid": admission_uid, "allowed": True},
         }
 
     patch = []

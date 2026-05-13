@@ -69,6 +69,43 @@ async def test_mutate_vm_fqdn_too_long(mocker):
 
 
 @pytest.mark.asyncio
+async def test_mutate_vm_fqdn_too_long_without_enrol_label_is_allowed(mocker):
+    """
+    A long-named VM that did NOT opt into IPA enrolment must never be blocked
+    by our webhook — the 64-char FQDN check is only relevant when we are
+    going to enrol.
+    """
+    long_name = "a" * 40
+    long_namespace = "b" * 20
+
+    request_data = {
+        "request": {
+            "uid": "123",
+            "namespace": long_namespace,
+            "object": {
+                "metadata": {
+                    "name": long_name,
+                    "namespace": long_namespace,
+                    # No ipa-enroll label, no instancetype → must be left alone.
+                },
+                "spec": {"template": {"spec": {}}},
+            },
+        }
+    }
+
+    # ipa_host_add must not be reached.
+    add_mock = mocker.patch("app.routers.webhook.ipa_host_add")
+
+    response = client.post("/mutate", json=request_data)
+    assert response.status_code == 200
+    data = response.json()
+
+    assert data["response"]["allowed"] is True
+    assert "patch" not in data["response"]
+    add_mock.assert_not_called()
+
+
+@pytest.mark.asyncio
 async def test_mutate_vm_success(mocker):
     # 1. Mock the dependencies
     mocker.patch(

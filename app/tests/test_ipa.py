@@ -1,7 +1,7 @@
 import pytest
 from unittest.mock import MagicMock, call
 import dns.resolver
-from app.services.ipa import ipa_resolve_srv, get_ipa_client, ipa_host_add
+from app.services.ipa import ipa_resolve_srv, get_ipa_client, ipa_host_add, build_fqdn
 
 # --- Test DNS Resolution ---
 
@@ -146,3 +146,36 @@ def test_host_add_raises_when_host_already_enrolled(mocker):
 
     with pytest.raises(RuntimeError, match="already enrolled"):
         ipa_host_add("my-vm", "default", "test-uuid-5678")
+
+
+# --- Test build_fqdn ---
+
+
+def test_build_fqdn_short_name_constructs_full(mocker):
+    """A bare VM name gets the namespace and domain appended."""
+    mocker.patch.dict("app.services.ipa.CONFIG", {"DOMAIN": "example.com"})
+    assert build_fqdn("web1", "prod") == "web1.prod.example.com"
+
+
+def test_build_fqdn_full_fqdn_name_is_not_duplicated(mocker):
+    """
+    If the VM was named with the exact FQDN we would have generated,
+    return it as-is rather than appending namespace/domain a second time.
+    """
+    mocker.patch.dict("app.services.ipa.CONFIG", {"DOMAIN": "example.com"})
+    assert (
+        build_fqdn("web1.prod.example.com", "prod") == "web1.prod.example.com"
+    )
+
+
+def test_build_fqdn_unrelated_dotted_name_is_still_appended(mocker):
+    """
+    A dotted VM name that does not match our generated suffix is treated as
+    a label, not an FQDN — we still construct the full name. The user picked
+    a non-conventional name; this is intentional behaviour, not a feature.
+    """
+    mocker.patch.dict("app.services.ipa.CONFIG", {"DOMAIN": "example.com"})
+    assert (
+        build_fqdn("web1.example.com", "prod")
+        == "web1.example.com.prod.example.com"
+    )

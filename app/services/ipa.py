@@ -187,4 +187,9 @@ def ipa_host_del(vm_name: str, namespace: str):
 def build_fqdn(vm_name: str, namespace: str) -> str:
     # Handle case sensitivity of config keys if needed
     domain = CONFIG.get("DOMAIN") or CONFIG.get("domain")
+    # If the VM was named with the exact FQDN we would have generated,
+    # don't double-append the namespace and domain.
+    suffix = f".{namespace}.{domain}"
+    if vm_name.endswith(suffix):
+        return vm_name
     return f"{vm_name}.{namespace}.{domain}"
