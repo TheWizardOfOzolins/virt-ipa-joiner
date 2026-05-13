@@ -163,9 +163,7 @@ def test_build_fqdn_full_fqdn_name_is_not_duplicated(mocker):
     return it as-is rather than appending namespace/domain a second time.
     """
     mocker.patch.dict("app.services.ipa.CONFIG", {"DOMAIN": "example.com"})
-    assert (
-        build_fqdn("web1.prod.example.com", "prod") == "web1.prod.example.com"
-    )
+    assert build_fqdn("web1.prod.example.com", "prod") == "web1.prod.example.com"
 
 
 def test_build_fqdn_unrelated_dotted_name_is_still_appended(mocker):
@@ -175,7 +173,4 @@ def test_build_fqdn_unrelated_dotted_name_is_still_appended(mocker):
     a non-conventional name; this is intentional behaviour, not a feature.
     """
     mocker.patch.dict("app.services.ipa.CONFIG", {"DOMAIN": "example.com"})
-    assert (
-        build_fqdn("web1.example.com", "prod")
-        == "web1.example.com.prod.example.com"
-    )
+    assert build_fqdn("web1.example.com", "prod") == "web1.example.com.prod.example.com"
