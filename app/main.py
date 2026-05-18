@@ -1,4 +1,5 @@
 import asyncio
+import logging
 import os
 from contextlib import asynccontextmanager
 from fastapi import FastAPI, HTTPException
@@ -9,6 +10,29 @@ from app.services.k8s import run_controller
 from app.config import logger
 from app.task_tracker import cancel_all_tasks
 from app.health import is_ipa_healthy
+
+
+class _AccessLogProbeFilter(logging.Filter):
+    """Drop uvicorn access logs for successful probe / scrape requests.
+
+    Kubernetes startup/readiness/liveness probes and Prometheus scrapes hit
+    these endpoints every few seconds; the 200 lines drown out admission
+    events. Non-200 responses still log so probe failures stay visible.
+    """
+
+    _SUPPRESSED = ("/healthz", "/readyz", "/metrics")
+
+    def filter(self, record: logging.LogRecord) -> bool:
+        # uvicorn.access logs with args = (client_addr, method, path, http_version, status)
+        try:
+            path = str(record.args[2]).split("?", 1)[0]
+            status = record.args[4]
+        except (IndexError, TypeError):
+            return True
+        return not (path in self._SUPPRESSED and status == 200)
+
+
+logging.getLogger("uvicorn.access").addFilter(_AccessLogProbeFilter())
 
 # Holds the controller task so probes can inspect its state.
 _controller_task: asyncio.Task | None = None
