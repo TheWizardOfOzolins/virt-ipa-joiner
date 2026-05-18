@@ -52,7 +52,7 @@ jobs:
 
       - uses: actions/setup-python@v5
         with:
-          python-version: "3.12"
+          python-version: "3.14"
 
       # python-freeipa and kubernetes-asyncio need these system libs to compile.
       - name: Install system dependencies
@@ -137,7 +137,7 @@ jobs:
       # ── Python Setup ───────────────────────────────────────────────────────
       - uses: actions/setup-python@v5
         with:
-          python-version: "3.12"
+          python-version: "3.14"
 
       - name: Install system dependencies
         run: sudo apt-get install -y libldap2-dev libsasl2-dev libssl-dev
@@ -232,7 +232,7 @@ jobs:
       # ── Python + App Setup ─────────────────────────────────────────────────
       - uses: actions/setup-python@v5
         with:
-          python-version: "3.12"
+          python-version: "3.14"
 
       - name: Install system dependencies
         run: sudo apt-get install -y libldap2-dev libsasl2-dev libssl-dev
@@ -357,7 +357,7 @@ jobs:
 
       - uses: actions/setup-python@v5
         with:
-          python-version: "3.12"
+          python-version: "3.14"
 
       - name: Install system dependencies
         run: sudo apt-get install -y libldap2-dev libsasl2-dev libssl-dev

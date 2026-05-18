@@ -11,7 +11,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 ## Development Setup
 
 ```bash
-python3.12 -m venv venv
+python3.14 -m venv venv
 source venv/bin/activate
 pip install -r requirements.txt -r requirements-test.txt -r requirements-dev.txt
 pre-commit install --install-hooks
@@ -86,7 +86,7 @@ Tests live in `app/tests/`. `conftest.py` patches `kubernetes_asyncio` and `pyth
 
 ## Deployment
 
-Deploy via Kustomize overlays under `docs/deploy/kustomize/`. The overlay at `overlays/cluster1/` contains the cluster-specific `Secret` with IPA credentials. The app runs in the `openshift-cnv` namespace as UID 1001 on Red Hat UBI 9.
+Deploy via Kustomize overlays under `docs/deploy/kustomize/`. The overlay at `overlays/cluster1/` contains the cluster-specific `Secret` with IPA credentials. The app runs in the `openshift-cnv` namespace as UID 65532 on a Red Hat Hardened Image (`registry.access.redhat.com/hi/python:3.14`).
 
 ## Releasing
 

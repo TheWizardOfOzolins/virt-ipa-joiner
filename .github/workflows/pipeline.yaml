@@ -1,4 +1,4 @@
-name: CI/CD Pipeline (Podman/UBI)
+name: CI/CD Pipeline (Podman/Hardened)
 
 on:
   push:
@@ -24,7 +24,7 @@ jobs:
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
-          python-version: '3.12'
+          python-version: '3.14'
 
       - name: Install Ruff
         run: pip install ruff
@@ -44,13 +44,13 @@ jobs:
       - name: Checkout Code
         uses: actions/checkout@v4
 
-      - name: Run Tests in UBI Container
+      - name: Run Tests in Hardened Builder Container
         run: |
           podman run --rm \
             -u 0 \
             -v ${{ github.workspace }}:/app:z \
             -w /app \
-            registry.access.redhat.com/ubi9/python-312:latest \
+            registry.access.redhat.com/hi/python:3.14-builder \
             /bin/bash -c "
               dnf install -y gcc openldap-devel cyrus-sasl-devel openssl-devel && \
               pip install --no-cache-dir -r requirements.txt && \
@@ -90,7 +90,7 @@ jobs:
         run: |
           # Fetch tags to see if this version was already released
           git fetch --tags
-          
+
           if git rev-parse "v${{ env.APP_VERSION }}" >/dev/null 2>&1; then
             echo "::notice title=Release Status::Version v${{ env.APP_VERSION }} already exists. Skipping 'latest' and version tags."
             echo "IS_NEW_RELEASE=false" >> $GITHUB_ENV
