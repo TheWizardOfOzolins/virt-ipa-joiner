@@ -1,9 +1,7 @@
 # Stage 1: Builder — Red Hat Hardened Python (Hummingbird OS)
 FROM registry.access.redhat.com/hi/python:3.14-builder AS builder
 
-ARG APP_VERSION=0.0.0
-ENV APP_VERSION=$APP_VERSION \
-    PYTHONDONTWRITEBYTECODE=1 \
+ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1
 
 USER 0
@@ -31,7 +29,11 @@ RUN pip install --no-cache-dir --upgrade pip && \
 # Stage 2: Runtime — distroless hardened image, no shell, no dnf
 FROM registry.access.redhat.com/hi/python:3.14
 
-ENV PYTHONDONTWRITEBYTECODE=1 \
+# APP_VERSION must be redeclared here — ARG/ENV from the builder stage
+# do not carry across multi-stage FROM boundaries.
+ARG APP_VERSION=0.0.0
+ENV APP_VERSION=$APP_VERSION \
+    PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
     PATH="/app/.venv/bin:$PATH"
 
