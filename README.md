@@ -36,7 +36,7 @@ The application also exposes `/healthz` (liveness), `/readyz` (readiness — add
 * **DNS Auto-Discovery:** Automatically locates FreeIPA servers using _kerberos._tcp SRV records, ensuring high availability and load balancing without manual configuration.
 * **Dynamic OS Support:** Automatically detects OS (RHEL/CentOS/Fedora vs Ubuntu/Debian) based on `instancetype` or `preference` and adjusts install commands (`dnf` vs `apt-get`).
 * **InstanceType Inheritance:** Supports inheriting enrollment labels from `VirtualMachineClusterInstanceType`.
-* **Security:** Runs as a non-root user (UID 1001) on Red Hat UBI 9.
+* **Security:** Runs as a non-root user (UID 65532) on a Red Hat Hardened Image (`hi/python:3.14`).
 * **Observability:** Emits native Kubernetes Events (`Normal` and `Warning`) to the VM object for enrollment status. Exposes a Prometheus `/metrics` endpoint (HTTP request counts, latency, and sizes) and separate `/healthz` (liveness) and `/readyz` (readiness) probes.
 
 ## 🚀 Deployment
@@ -57,7 +57,7 @@ The application also exposes `/healthz` (liveness), `/readyz` (readiness — add
 1. Create a virtual environment:
 
     ```bash
-    python3.12 -m venv venv
+    python3.14 -m venv venv
     source venv/bin/activate
     ```
 
